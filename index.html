@@ -3574,44 +3574,68 @@ function saveSettings() {
 // ═══════════════════════════════════════
 var activeChannelSlug = null;
 
-const stickersList = `[emote:4851601:dommyxmommyevilduck]
-!points
-⚡🔥 ULTRA POWER 🔥⚡
+const stickersList = `⚡🔥 BEAST 🔥⚡
 [emote:3302862:destrox88xElmoShrug]
-💥👑 KING MODE 👑💥
+💥👑 LEGEND 👑💥
+[emote:3198871:dommyxmommycatdance]
+[emote:3301296:destrox88xKermitSip]
+!points
+👑💣 UNSTOPPABLE 💣👑
+[emote:2346108:destrox88xhide]
 [emote:5470844:kickclassic]
-[emote:3421897:dommyxmommycatpunch]
 !points
-⚡️🔥 BIG ENERGY 🔥⚡️
-[emote:3304255:destrox88xSus]
-🔥⚡ MAX POWER ⚡🔥
-[emote:2030528:destrox88xExcellent]
-!points
+🔥💥 WILDFIRE 💥🔥
+[emote:3301296:destrox88xKermitSip]
+👑⚡ GOATED ⚡👑
 [emote:4851601:dommyxmommyevilduck]
-⚡💣 BOOM TIME 💣⚡
-[emote:4851612:dommyxmommycoolduck]
-🔥⚡ OVERDRIVE ⚡🔥
-[emote:3304255:destrox88xSus]
+[emote:4851601:dommyxmommyevilduck]
 !points
-[emote:4851610:dommyxmommysadduck]
-👑⚡ LEGEND 👑⚡
-[emote:3538787:dommyxmommydapmeup]
-🔥💣 FIRE UP 💣🔥
-[emote:2030859:destrox88xKermitNod]
-[emote:4157261:dommyxmommyFACEPALM]
-!points
-💥⚡ HYPER ⚡💥
-[emote:4157265:dommyxmommyKISSY]
-⚡🚀 SKY HIGH 🚀⚡
-[emote:1508551:destrox88xlove]
+⚡👑 CROWNED 👑⚡
+[emote:4851601:dommyxmommyevilduck]
+🔥🚀 LIFTOFF 🚀🔥
 [emote:4157273:dommyxmommyANGRYGROGU]
+💣⚡ EXPLOSIVE ⚡💣
+[emote:3538760:dommyxmommyCATSHOWER]
+👑🔥 GODMODE 🔥👑
+[emote:3538758:dommyxmommyYAWN]
+[emote:3307851:dommyxmommyhappy]
 !points
-💥⚡3AAAAASH⚡💥
+🔥👑 ROYAL FIRE 👑🔥
+[emote:3198871:dommyxmommycatdance]
+[emote:4851610:dommyxmommysadduck]
+!points
+⚡🔥 TOP TIER ⚡🔥
+[emote:5891787:dommyxmommyTEA]
+👑💣 PURE FIRE 💣👑
+[emote:4851612:dommyxmommycoolduck]
+🔥⚡ MAX DRIVE ⚡🔥
+[emote:4157265:dommyxmommyKISSY]
+💥👑 KING ENERGY 👑💥
 [emote:4851601:dommyxmommyevilduck]
-🔥⚡ OVERDRIVE ⚡🔥
-[emote:3304255:destrox88xSus]
+⚡🔥 GAME OVER 🔥⚡
+[emote:3301303:destrox88xKermitPanic]
+⚡🔥 ULTRA POWER 🔥⚡
+[emote:3301296:destrox88xKermitSip]
+💥👑 KING MODE 👑💥
+[emote:3302862:destrox88xElmoShrug]
+⚡️🔥 BIG ENERGY 🔥⚡️
+[emote:3301310:destrox88xSonic]
+🔥⚡ MAX POWER ⚡🔥
+[emote:3301316:destrox88xTails]
+[emote:3304146:destrox88xMegamanHB]
 !points
-[emote:2030528:destrox88xExcellent]`;
+🔥⚡ OVERDRIVE ⚡🔥
+[emote:3237610:destrox88xHmm]
+👑⚡ LEGEND 👑⚡
+[emote:2346108:destrox88xhide]
+🔥💣 FIRE UP 💣🔥
+[emote:4147914:duckPls]
+💥⚡ HYPER ⚡💥
+[emote:411587:ttonehdHype]
+⚡🚀 SKY HIGH 🚀⚡
+[emote:5756668:EZ]
+💥⚡3AAAAASH⚡💥
+[emote:5470844:kickclassic]`;
 
 function openChannelSettings(slug) {
     if (activeModalBotId === null) return;
