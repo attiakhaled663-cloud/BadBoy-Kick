@@ -4435,7 +4435,7 @@ async function runChannelOnce(bot, ch, eff, msgs, interval, infinite, repeatCoun
         if (eff.fourMessages && msgSent && bot.isSending && ch.enabled !== false) {
             for (var fm = 0; fm < 3; fm++) {
                 if (!bot.isSending || ch.enabled === false) break;
-                try { await delay(500, abortControllers[bot.id] ? abortControllers[bot.id].signal : undefined); }
+                try { await delay(7500, abortControllers[bot.id] ? abortControllers[bot.id].signal : undefined); }
                 catch(aborted) { return; }
                 if (bot.isSending && ch.enabled !== false) {
                     var rfm = await sendOneMessage();
