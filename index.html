@@ -317,7 +317,7 @@
             box-shadow:0 0 12px rgba(255,255,255,0.5);
         }
         .bot-checkbox.checked::after {
-            content:'🥷'; color:fff; font-weight:900; font-size:14px;
+            content:'✔️'; color:fff; font-weight:900; font-size:14px;
             animation:checkPop .25s ease;
         }
         @keyframes checkPop{from{transform:scale(0)}to{transform:scale(1)}}
@@ -1261,11 +1261,11 @@ body {
 
         <div class="bot-list" id="botList"></div>
 
-        <div class="selection-info" id="selectionInfo">المحدد: <span class="count">8</span> بوت (8 جاهز)</div>
+        <div class="selection-info" id="selectionInfo">المحدد: <span class="count">0</span> بوت (0 جاهز)</div>
 
         <div class="bulk-bar">
-            <button class="btn btn-fire" id="btnBulkStart" onclick="startSelectedBots()"><i class="fas fa-play"></i> 🥷تشغيل (0) بوت🥷?</button>
-            <button class="btn btn-stop btn-icon" id="btnBulkStop" onclick="stopAllBots()">🥷</button>
+            <button class="btn btn-fire" id="btnBulkStart" onclick="startSelectedBots()"><i class="fas fa-play"></i> تشغيل (0) بوت?</button>
+            <button class="btn btn-stop btn-icon" id="btnBulkStop" onclick="stopAllBots()">☢️</button>
         </div>
 
         <div class="secondary-actions">
@@ -4596,7 +4596,7 @@ function showNet(type, text, hideAfter) {
     var ctx = cv.getContext('2d');
     if (!ctx) return;
     var W, H, embers = [], MAX = 30;
-    var SKULL = '🥷';
+    var SKULL = '‌';
     function resize() { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; }
     resize(); window.addEventListener('resize', resize);
     function spawn() {
