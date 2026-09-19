@@ -3470,8 +3470,6 @@ async function mAddChannel() {
     var chatroomId = null;
     var lastReason = null;
 
-    // ✅ 6 محاولات شاملة (كل محاولة تجرب كل البروكسيات والـ endpoints)
-    // تأخير تصاعدي: 2s, 3s, 5s, 8s, 12s — يعطي البروكسيات وقتاً كافياً لإعادة الضبط
     var delays = [2000, 3000, 5000, 8000, 12000];
     for (var attempt = 1; attempt <= 6 && !chatroomId; attempt++) {
         var result = await verifyChannelComprehensive(slug, b);
@@ -3479,10 +3477,8 @@ async function mAddChannel() {
             chatroomId = result.chatroomId;
         } else {
             lastReason = result.reason;
-            // ✅ إذا القناة غير موجودة فعلاً، لا داعي لإعادة المحاولة
             if (lastReason === 'not_found') break;
             if (attempt < 6) {
-                // ✅ تأخير تصاعدي بين المحاولات للسماح بإعادة ضغط rate limits
                 await new Promise(function(r){ setTimeout(r, delays[attempt-1] || 12000); });
             }
         }
@@ -3492,26 +3488,55 @@ async function mAddChannel() {
     addBtn.innerHTML = oldHtml;
 
     if (chatroomId) {
-        // ✅ القناة موجودة ومتحقق منها — أضفها مع chatroom_id محفوظ
-        var channel = makeChannel(slug);
-        channel.chatroomId = chatroomId;
-        channel.verified = true;
-        b.channels.push(channel);
+        // ✅ أضف القناة لكل الحسابات دفعة واحدة
+        var addedTo = 0, skipped = 0, failedCount = 0;
+
+        for (var i = 0; i < accounts.length; i++) {
+            var acc = accounts[i];
+
+            // ✅ تحقق من الحد الأقصى لكل حساب
+            if (acc.channels.length >= MAX_CHANNELS_PER_BOT) {
+                failedCount++;
+                continue;
+            }
+
+            // ✅ لو القناة موجودة عند الحساب ده، تجاهله
+            if (findChannel(acc, slug)) {
+                skipped++;
+                continue;
+            }
+
+            // ✅ أنشئ القناة بنفس الإعدادات لكل الحسابات
+            var channel = makeChannel(slug);
+            channel.chatroomId = chatroomId;
+            channel.verified = true;
+            acc.channels.push(channel);
+            addedTo++;
+        }
+
         inp.value = '';
         inp.focus();
-        renderChannelsList(b);
+
+        // ✅ حفظ وإعادة عرض كل شيء
         persist();
-        toast('تمت إضافة القناة: ' + slug, 's');
+
+        // ✅ لو نافذة الإعدادات مفتوحة، أعد عرض قائمة القنوات للحساب النشط
+        var activeBot = findBot(activeModalBotId);
+        if (activeBot) renderChannelsList(activeBot);
+
+        renderBotList();
+
+        // ✅ رسالة نجاح: اسم القناة + اسم الحساب اللي اتضافت فيه
+        toast('تمت إضافة "' + slug + '" إلى "' + b.username + '"', 's');
+
     } else if (lastReason === 'not_found') {
-        // ✅ القناة غير موجودة فعلاً — أكدها كل البروكسيات بـ 404
         toast('القناة "' + slug + '" غير موجودة — تحقق من الاسم', 'e');
     } else {
-        // ✅ فشل الاتصال بكل البروكسيات بعد 6 محاولات
         toast('تعذّر التحقق من القناة بعد 6 محاولات — تحقق من الإنترنت وأعد المحاولة', 'e');
     }
 }
 
-function mRemoveChannel(slug) {
+function mRemoveChannel(slug) { الأحاا
     if (activeModalBotId === null) return;
     var b = findBot(activeModalBotId);
     if (!b) return;
