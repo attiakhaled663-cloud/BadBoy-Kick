@@ -506,6 +506,28 @@
         .channels-list::-webkit-scrollbar { width:5px; }
         .channels-list::-webkit-scrollbar-thumb { background:rgba(83,252,24,.35); border-radius:3px; }
         .channels-list::-webkit-scrollbar-track { background:transparent; }
+
+        /* ✅ تبويبات فلترة قائمة القنوات: الكل / مباشر / OFF */
+        .channels-filter-tabs { display:flex; gap:6px; margin-bottom:8px; }
+        .channels-filter-tab {
+            flex:1; display:flex; align-items:center; justify-content:center; gap:5px;
+            padding:7px 4px; border-radius:9px; border:1px solid var(--border);
+            background:rgba(255,255,255,0.02); font-size:11px; font-weight:800;
+            color:var(--muted); cursor:pointer; transition:all .2s; user-select:none;
+        }
+        .channels-filter-tab:hover { color:var(--fg); border-color:var(--accent); }
+        .channels-filter-tab.active { border-color:var(--accent); background:rgba(83,252,24,.15); color:var(--accent); }
+        .channels-filter-tab .cf-badge {
+            min-width:16px; padding:0 4px; height:16px; line-height:16px; border-radius:8px;
+            background:rgba(255,255,255,0.08); font-size:9px; font-weight:900; text-align:center;
+        }
+        .channels-filter-tab.active .cf-badge { background:rgba(83,252,24,.3); }
+        .channels-filter-tab .cf-live-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); flex-shrink:0; }
+        .channels-filter-tab[data-filter="live"] .cf-live-dot { background:var(--success); box-shadow:0 0 6px var(--success); }
+        .channels-filter-tab[data-filter="off"] .cf-live-dot { background:var(--danger); }
+        .channel-live-dot { width:7px; height:7px; border-radius:50%; background:var(--muted); flex-shrink:0; display:inline-block; margin-left:5px; }
+        .channel-live-dot.live { background:var(--success); box-shadow:0 0 5px var(--success); }
+        .channel-live-dot.off { background:var(--danger); }
         .quick-list { display:flex; flex-direction:column; gap:5px; max-height:200px; overflow-y:auto; }
         .quick-item {
             display:flex; align-items:center; gap:8px;
@@ -1048,6 +1070,19 @@ body {
             <button class="btn btn-ghost" style="width:100%" onclick="openUnifiedSettings()" title="تطبيق إعدادات واحدة على كل قنوات هذا الحساب">
                 <i class="fas fa-screwdriver-wrench"></i> إعدادات موحدة لقنوات هذا الحساب
             </button>
+        </div>
+
+        <!-- ✅ تبويبات فلترة القنوات: الكل / مباشر / OFF -->
+        <div class="channels-filter-tabs" id="channelsFilterTabs">
+            <div class="channels-filter-tab active" data-filter="all" onclick="setChannelsFilter('all')">
+                <span>الكل</span><span class="cf-badge" id="cfCountAll">0</span>
+            </div>
+            <div class="channels-filter-tab" data-filter="live" onclick="setChannelsFilter('live')">
+                <span class="cf-live-dot"></span><span>مباشر</span><span class="cf-badge" id="cfCountLive">0</span>
+            </div>
+            <div class="channels-filter-tab" data-filter="off" onclick="setChannelsFilter('off')">
+                <span class="cf-live-dot"></span><span>OFF</span><span class="cf-badge" id="cfCountOff">0</span>
+            </div>
         </div>
 
         <!-- قائمة القنوات -->
@@ -1655,6 +1690,39 @@ async function checkChannelLive(slug, acc) {
 }
 
 // ═══════════════════════════════════════
+//  ✅ مراقبة حالة البث لكل قنوات الحساب المفتوح — كل 45 ثانية
+// ═══════════════════════════════════════
+async function pollChannelsLiveStatus(b) {
+    if (!b || !b.channels || b.channels.length === 0) return;
+    await Promise.all(b.channels.map(function(ch) {
+        return checkChannelLive(ch.slug, b).then(function(live) {
+            if (live !== null) ch.isLive = live;
+        }).catch(function(){});
+    }));
+    persist();
+    // ✅ أعد الرسم فقط لو نفس الحساب لا يزال مفتوحاً (تجنّب سباق إذا تغيّر الحساب أثناء الفحص)
+    if (activeModalBotId === b.id) renderChannelsList(b);
+}
+
+function startChannelsLiveMonitor(b) {
+    stopChannelsLiveMonitor();
+    if (!b) return;
+    pollChannelsLiveStatus(b); // ✅ فحص فوري عند فتح النافذة
+    channelsLiveMonitorTimer = setInterval(function() {
+        var bb = findBot(activeModalBotId);
+        if (bb) pollChannelsLiveStatus(bb);
+        else stopChannelsLiveMonitor();
+    }, 45000); // ✅ كل 45 ثانية من السيرفر
+}
+
+function stopChannelsLiveMonitor() {
+    if (channelsLiveMonitorTimer) {
+        clearInterval(channelsLiveMonitorTimer);
+        channelsLiveMonitorTimer = null;
+    }
+}
+
+// ═══════════════════════════════════════
 //  ✅ تحقق شامل من القناة — يجرب كل بروكسي بشكل فردي
 // ═══════════════════════════════════════
 async function tryFetchWithAllProxies(kickPath, options) {
@@ -1831,6 +1899,8 @@ var accounts = [];           // كل البوتات
 var accIdCounter = 0;        // عداد لإنشاء معرّفات فريدة
 var selectedBots = {};       // معرّفات البوتات المحددة
 var activeModalBotId = null; // البوت المفتوح إعداداته حالياً
+var channelsFilterTab = 'all'; // فلتر قائمة القنوات: all / live / off
+var channelsLiveMonitorTimer = null; // مؤقت مراقبة حالة البث كل 45 ثانية
 var abortControllers = {};   // للتحكم بإيقاف البوتات
 
 function makeBot(token, username) {
@@ -3424,13 +3494,17 @@ function openSettings(id) {
     setToggle('tgAutoRecover', true);
     setToggle('tgParallel', true);
     persist();
+    channelsFilterTab = 'all';
+    setChannelsFilter('all');
     renderChannelsList(b);
     $('settingsModal').classList.add('open');
+    startChannelsLiveMonitor(b); // ✅ ابدأ مراقبة حالة البث كل 45 ثانية
 }
 
 function closeSettings() {
     $('settingsModal').classList.remove('open');
     activeModalBotId = null;
+    stopChannelsLiveMonitor(); // ✅ أوقف المراقبة عند إغلاق النافذة
 }
 
 function setToggle(id, on) {
@@ -3520,9 +3594,12 @@ async function mAddChannel() {
         // ✅ حفظ وإعادة عرض كل شيء
         persist();
 
-        // ✅ لو نافذة الإعدادات مفتوحة، أعد عرض قائمة القنوات للحساب النشط
+        // ✅ لو نافذة الإعدادات مفتوحة، أعد عرض قائمة القنوات للحساب النشط وافحص حالة البث فوراً
         var activeBot = findBot(activeModalBotId);
-        if (activeBot) renderChannelsList(activeBot);
+        if (activeBot) {
+            renderChannelsList(activeBot);
+            pollChannelsLiveStatus(activeBot);
+        }
 
         renderBotList();
 
@@ -3549,15 +3626,58 @@ function mRemoveChannel(slug) { الأحاا
     });
 }
 
+function setChannelsFilter(f) {
+    channelsFilterTab = f;
+    var tabs = $('channelsFilterTabs');
+    if (tabs) {
+        var els = tabs.querySelectorAll('.channels-filter-tab');
+        for (var t = 0; t < els.length; t++) {
+            els[t].classList.toggle('active', els[t].getAttribute('data-filter') === f);
+        }
+    }
+    if (activeModalBotId !== null) {
+        var b = findBot(activeModalBotId);
+        if (b) renderChannelsList(b);
+    }
+}
+
 function renderChannelsList(b) {
     var box = $('mChannelsList');
+
+    // ✅ تحديث عدّادات التبويبات (الكل / مباشر / OFF)
+    var totalCount = b.channels ? b.channels.length : 0;
+    var liveCount = 0, offCount = 0;
+    if (b.channels) {
+        for (var ci = 0; ci < b.channels.length; ci++) {
+            if (b.channels[ci].isLive === true) liveCount++; else offCount++;
+        }
+    }
+    if ($('cfCountAll')) $('cfCountAll').textContent = totalCount;
+    if ($('cfCountLive')) $('cfCountLive').textContent = liveCount;
+    if ($('cfCountOff')) $('cfCountOff').textContent = offCount;
+
     if (!b.channels || b.channels.length === 0) {
         box.innerHTML = '<div style="text-align:center;padding:14px;color:var(--muted);font-size:11px"><i class="fas fa-tv" style="font-size:20px;display:block;margin-bottom:6px;color:var(--border)"></i>لا توجد قنوات — أضف قناة للبدء</div>';
         return;
     }
+
+    // ✅ فلترة القنوات حسب التبويب النشط
+    var listToRender = b.channels;
+    if (channelsFilterTab === 'live') {
+        listToRender = b.channels.filter(function(c){ return c.isLive === true; });
+    } else if (channelsFilterTab === 'off') {
+        listToRender = b.channels.filter(function(c){ return c.isLive !== true; });
+    }
+
+    if (listToRender.length === 0) {
+        var emptyMsg = channelsFilterTab === 'live' ? 'لا توجد قنوات تبث الآن' : (channelsFilterTab === 'off' ? 'لا توجد قنوات غير مباشرة' : 'لا توجد قنوات');
+        box.innerHTML = '<div style="text-align:center;padding:14px;color:var(--muted);font-size:11px"><i class="fas fa-tv" style="font-size:20px;display:block;margin-bottom:6px;color:var(--border)"></i>' + emptyMsg + '</div>';
+        return;
+    }
+
     var html = '';
-    for (var i = 0; i < b.channels.length; i++) {
-        var ch = b.channels[i];
+    for (var i = 0; i < listToRender.length; i++) {
+        var ch = listToRender[i];
         var status = ch.status || 'idle';
         var isEnabled = ch.enabled !== false;
         // ✅ إذا كانت القناة معطّلة، تظهر بحالة "معطّلة"
@@ -3586,7 +3706,8 @@ function renderChannelsList(b) {
         html += '<div class="' + cardCls + '">';
         html += '<div class="channel-status ' + statusCls + '">' + statusText + '</div>';
         html += '<div style="flex:1;min-width:0">';
-        html += '<div class="channel-name">' + escH(ch.slug) + '</div>';
+        var liveDotCls = ch.isLive === true ? 'live' : (ch.isLive === false ? 'off' : '');
+        html += '<div class="channel-name">' + escH(ch.slug) + '<span class="channel-live-dot ' + liveDotCls + '" title="' + (ch.isLive === true ? 'مباشر' : (ch.isLive === false ? 'غير مباشر' : 'غير معروف')) + '"></span></div>';
         html += '<div class="channel-meta">';
         html += '<span class="meta-item"><i class="fas fa-comment"></i>' + msgCount + ' رسالة</span>';
         html += '<span class="meta-item"><i class="fas fa-clock"></i>' + (ch.interval || 5) + 'ث</span>';
