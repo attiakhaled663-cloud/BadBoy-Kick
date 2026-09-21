@@ -250,6 +250,8 @@
         .btn:disabled { opacity:.35; cursor:not-allowed; }
         .btn-fire { background:linear-gradient(135deg,#53fc18,#9dff6b); color:#000; text-shadow:none; }
         .btn-fire:hover:not(:disabled) { box-shadow:0 0 24px rgba(83,252,24,.05); transform:translateY(-1px); }
+        .btn-fire.active-run { background:var(--danger); color:#fff; border:2px solid #fff; }
+        .btn-fire.active-run:hover:not(:disabled) { box-shadow:0 0 24px rgba(255,59,59,.4); transform:translateY(-1px); }
         .btn-stop { background:#000; color:#fff; border:2px solid #fff !important; }
         .btn-ghost { background:rgba(83,252,24,.05); color:var(--fg); border:2px solid #fff; }
         .btn-ghost:hover:not(:disabled) { background:rgba(83,252,24,.08); border-color:rgba(83,252,24,.35); }
@@ -1301,8 +1303,7 @@ body {
         <div class="selection-info" id="selectionInfo">المحدد: <span class="count">0</span> بوت (0 جاهز)</div>
 
         <div class="bulk-bar">
-            <button class="btn btn-fire" id="btnBulkStart" onclick="startSelectedBots()"><i class="fas fa-play"></i> تشغيل (0) بوت?</button>
-            <button class="btn btn-stop btn-icon" id="btnBulkStop" onclick="stopAllBots()">☢️</button>
+            <button class="btn btn-fire" id="btnBulkStart" onclick="toggleBulkRun()"><i class="fas fa-play"></i> تشغيل المحددة</button>
         </div>
 
         <div class="secondary-actions">
@@ -3433,10 +3434,17 @@ function updateBulkUI() {
     }
     $('selectionInfo').innerHTML = 'المحدد: <span class="count">' + count + '</span> بوت' + (readyCount > 0 ? ' ('+readyCount+' جاهز)' : '');
     var btnStart = $('btnBulkStart');
-    btnStart.disabled = readyCount === 0;
-    btnStart.innerHTML = readyCount > 0
-        ? '<i class="fas fa-play"></i> تشغيل (' + readyCount + ') بوت'
-        : '<i class="fas fa-play"></i> تشغيل المحددة';
+    if (_bulkRunActive) {
+        btnStart.disabled = false;
+        btnStart.classList.add('active-run');
+        btnStart.innerHTML = '☢️ إيقاف المحدد';
+    } else {
+        btnStart.classList.remove('active-run');
+        btnStart.disabled = readyCount === 0;
+        btnStart.innerHTML = readyCount > 0
+            ? '<i class="fas fa-play"></i> تشغيل (' + readyCount + ') بوت'
+            : '<i class="fas fa-play"></i> تشغيل المحددة';
+    }
     $('btnClearSel').disabled = count === 0;
 }
 
@@ -3999,6 +4007,15 @@ var _botStartTimer = null;        // مؤقّت التأخير بين البوت
 var _forceStopAll = false;        // علم الإيقاف الإجباري
 var _bulkRunActive = false;       // ✅ يصبح true بعد الضغط على "تشغيل المحددة" — أي بوت يتم تحديده بعدها يلتحق بالتشغيل تلقائياً
 
+// ✅ زر واحد مدمج: تشغيل المحددة ↔ إيقاف المحدد (☢️)
+function toggleBulkRun() {
+    if (_bulkRunActive) {
+        stopAllBots();
+    } else {
+        startSelectedBots();
+    }
+}
+
 async function startSelectedBots() {
     var toStart = [];
     for (var id in selectedBots) {
@@ -4040,6 +4057,7 @@ async function startSelectedBots() {
     // ✅ إعادة ضبط حالة الإيقاف الإجباري + بناء قائمة الانتظار
     _forceStopAll = false;
     _bulkRunActive = true; // ✅ تفعيل وضع "التشغيل الجماعي" — أي تحديد جديد بعد كده يلتحق بالتشغيل تلقائياً
+    if (typeof updateBulkUI === 'function') updateBulkUI(); // ✅ تحديث فوري لزر تشغيل المحددة ليتحول للأحمر ☢️
     _botStartQueue = toStart.slice();
     toast('تشغيل ' + toStart.length + ' بوت (كل بوت بعد 3 ثوانٍ)', 's');
 
