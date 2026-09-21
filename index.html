@@ -5282,7 +5282,12 @@ document.addEventListener('DOMContentLoaded',async()=>{await kickHandleCallback(
 })();
 
 /* ================= منع قائمة النقر الطويل + تحسين تجربة التطبيق ================= */
-document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+document.addEventListener("contextmenu", function (e) {
+    var el = e.target;
+    var editable = el.closest && el.closest('input, textarea, [contenteditable="true"], [contenteditable=""]');
+    if (editable) { return; } // اسمح بقائمة اللصق داخل حقول الإدخال
+    e.preventDefault();
+});
 document.addEventListener("dragstart", function (e) { e.preventDefault(); });
 </script>
 
