@@ -3442,8 +3442,8 @@ function updateBulkUI() {
         btnStart.classList.remove('active-run');
         btnStart.disabled = readyCount === 0;
         btnStart.innerHTML = readyCount > 0
-            ? '<i class="fas fa-play"></i> تشغيل (' + readyCount + ') بوت'
-            : '<i class="fas fa-play"></i> تشغيل المحددة';
+            ? '<i class="fas fa-play"></i> تشغيل المحدد'
+            : '<i class="fas fa-play"></i> تشغيل المحدد';
     }
     $('btnClearSel').disabled = count === 0;
 }
