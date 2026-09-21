@@ -4008,7 +4008,18 @@ var _forceStopAll = false;        // علم الإيقاف الإجباري
 var _bulkRunActive = false;       // ✅ يصبح true بعد الضغط على "تشغيل المحددة" — أي بوت يتم تحديده بعدها يلتحق بالتشغيل تلقائياً
 
 // ✅ زر واحد مدمج: تشغيل المحددة ↔ إيقاف المحدد (☢️)
+var _lastBulkToggleTime = 0;      // آخر وقت تم فيه التشغيل أو الإيقاف
+var BULK_TOGGLE_COOLDOWN = 3000;  // 3 ثوانٍ
+
 function toggleBulkRun() {
+    var now = Date.now();
+    var elapsed = now - _lastBulkToggleTime;
+    if (elapsed < BULK_TOGGLE_COOLDOWN) {
+        var remaining = Math.ceil((BULK_TOGGLE_COOLDOWN - elapsed) / 1000);
+        toast('يرجى الانتظار ' + remaining + ' ثانية قبل ' + (_bulkRunActive ? 'الإيقاف' : 'التشغيل') + ' مرة أخرى', 'e');
+        return;
+    }
+    _lastBulkToggleTime = now;
     if (_bulkRunActive) {
         stopAllBots();
     } else {
