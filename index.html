@@ -5701,4 +5701,249 @@ document.addEventListener("contextmenu", function (e) {
 document.addEventListener("dragstart", function (e) { e.preventDefault(); });
 </script>
 
+
+<!-- token-check v3 fix -->
+<script>
+
+/* ============================================================
+   فحص حالة التوكنات — نسخة v3 (إصلاح الشاشة التي لا تتوقف أبداً)
+   - مهلة لكل طلب + مهلة إجمالية لكل توكن => لا تعليق نهائياً
+   - تحديث تقدّم حقيقي أثناء الفحص (X / Y)
+   - تصنيف دقيق: يعمل / منتهي / تعذّر الفحص
+   ============================================================ */
+var _TC_REQ_TIMEOUT        = 7000;
+var _TC_TOKEN_BUDGET       = 22000;
+var _TC_CONCURRENCY        = 6;
+var _TC_RETRY_CONCURRENCY  = 3;
+var _tcRunning             = false;
+
+var _TC_PROXIES = [
+  { name:'codetabs',      build:function(u){ return 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u); } },
+  { name:'corsproxy.org', build:function(u){ return 'https://corsproxy.org/?'+encodeURIComponent(u); } },
+  { name:'cors-worker',   build:function(u){ return 'https://test.cors.workers.dev/?'+u; } },
+  { name:'allorigins',    build:function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); } },
+  { name:'thingproxy',    build:function(u){ return 'https://thingproxy.freeboard.io/fetch/'+u; } }
+];
+
+async function _tcGet(url, token, timeout){
+  var headers = { 'Accept':'application/json', 'Origin':KICK_BASE };
+  if (token){ headers['Authorization'] = 'Bearer ' + token; }
+  if (typeof xsrfToken !== 'undefined' && xsrfToken){ headers['X-XSRF-TOKEN'] = xsrfToken; }
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var timer = setTimeout(function(){ if (ctrl){ try { ctrl.abort(); } catch(e){} } }, timeout);
+  try {
+    var opts = { method:'GET', headers:headers, credentials:'omit' };
+    if (ctrl) opts.signal = ctrl.signal;
+    return await fetch(url, opts);
+  } finally { clearTimeout(timer); }
+}
+
+async function _tcRunLimited(items, limit, worker){
+  var results = new Array(items.length);
+  var idx = 0;
+  async function runner(){
+    while (idx < items.length){
+      var i = idx++;
+      try { results[i] = await worker(items[i], i); }
+      catch(e){ results[i] = { status:'unknown', error:String((e && e.message) || e) }; }
+    }
+  }
+  var n = Math.max(1, Math.min(limit, items.length));
+  var pool = [];
+  for (var k = 0; k < n; k++){ pool.push(runner()); }
+  await Promise.all(pool);
+  return results;
+}
+
+async function checkSingleTokenStatus(bot){
+  var tok = String((bot && bot.token) || '').trim();
+  var fb  = (bot && bot.username) || 'حساب';
+  if (!tok){ return { status:'expired', username:fb, reason:'لا يوجد توكن' }; }
+  if (/^bearer\s+/i.test(tok)){ tok = tok.replace(/^bearer\s+/i, '').trim(); }
+
+  var endpoints = ['/api/v1/user', '/api/v2/user'];
+  var list = _TC_PROXIES.slice();
+  if (typeof isDirectMode !== 'undefined' && isDirectMode){
+    list.unshift({ name:'direct', build:function(u){ return u; } });
+  }
+
+  var deadline = Date.now() + _TC_TOKEN_BUDGET;
+  var authFail = false, noUserEvidence = false, anyResponse = false, lastErr = '';
+
+  for (var ei = 0; ei < endpoints.length; ei++){
+    for (var pi = 0; pi < list.length; pi++){
+      if (Date.now() > deadline){ break; }
+      var px = list[pi], url;
+      try { url = px.build(KICK_BASE + endpoints[ei] + '?_=' + Date.now() + '_' + Math.random().toString(36).slice(2)); }
+      catch(e){ continue; }
+      var res = null;
+      try { res = await _tcGet(url, tok, _TC_REQ_TIMEOUT); }
+      catch(e){ lastErr = String((e && e.message) || e); continue; }
+      anyResponse = true;
+      var st = res.status;
+
+      if (st === 401 || st === 403){ authFail = true; continue; }
+      if (st === 404 || st === 502 || st === 503 || st === 520 || st === 522 || st === 524){ lastErr = 'HTTP ' + st; continue; }
+      if (!res.ok){ lastErr = 'HTTP ' + st; continue; }
+
+      var raw = '';
+      try { raw = await res.text(); } catch(e){ lastErr = 'read-fail'; continue; }
+      var txt = String(raw || '').trim();
+      if (!txt){ lastErr = 'empty-body'; continue; }
+
+      if (/unauthenticated|unauthorized|invalid[_ ]?token|token[_ ]?expired|token has expired|"token"\s*:\s*\[\s*\]/i.test(txt)){
+        authFail = true; continue;
+      }
+
+      var data = null;
+      try { data = JSON.parse(txt); } catch(e){ lastErr = 'bad-json'; continue; }
+      if (data && data.errors && !data.id && !data.username){ lastErr = 'errors'; continue; }
+
+      var src = data;
+      if (data && typeof data === 'object'){
+        if (data.user && typeof data.user === 'object'){ src = data.user; }
+        else if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)){ src = data.data; }
+      }
+      var uname = src && (src.username || src.slug || src.name);
+      if (uname){ return { status:'active', username:String(uname), proxy:px.name }; }
+
+      /* 200 ولكن بدون أي بيانات مستخدم (مثال: {} ) = دليل قوي على توكن منتهي/غير صالح */
+      noUserEvidence = true;
+    }
+    if (Date.now() > deadline){ break; }
+  }
+
+  if (authFail || (anyResponse && noUserEvidence)){
+    return { status:'expired', username:fb, reason: authFail ? 'رفض مصادقة (401/403)' : 'استجابة بدون بيانات مستخدم' };
+  }
+  return { status:'unknown', username:fb, error: lastErr || 'فشل الاتصال — تحقق من الإنترنت' };
+}
+
+function _tcRender(results, list, elapsedMs){
+  var content = $('tokenCheckContent');
+  if (!content){ return; }
+  var expired = [], active = [], unknown = [];
+  for (var i = 0; i < list.length; i++){
+    var b = list[i] || {};
+    var r = results[i] || { status:'unknown' };
+    var name = (b.username || (r && r.username) || ('حساب #' + (i + 1)));
+    if (r && r.status === 'active'){ active.push(r.username || name); }
+    else if (r && r.status === 'expired'){ expired.push(name); }
+    else { unknown.push(name); }
+  }
+  var h = '';
+  h += '<div class="token-check-stats">';
+  h += '<div class="token-stat expired"><div class="ts-icon"><i class="fas fa-triangle-exclamation"></i></div><div class="ts-num">' + expired.length + '</div><div class="ts-label">توكن منتهي</div></div>';
+  h += '<div class="token-stat active"><div class="ts-icon"><i class="fas fa-circle-check"></i></div><div class="ts-num">' + active.length + '</div><div class="ts-label">توكن يعمل</div></div>';
+  h += '</div>';
+
+  h += '<div class="token-check-section-title"><i class="fas fa-user-xmark"></i><span>الحسابات التي انتهت توكناتها</span></div>';
+  if (expired.length){
+    h += '<div class="expired-list">';
+    for (var e = 0; e < expired.length; e++){
+      h += '<div class="expired-account"><i class="fas fa-circle-xmark"></i><span>' + escH(expired[e]) + '</span></div>';
+    }
+    h += '</div>';
+  } else {
+    h += '<div class="token-empty"><i class="fas fa-shield-check"></i><br>لا يوجد أي حساب بتوكن منتهي.</div>';
+  }
+
+  if (active.length){
+    h += '<div class="token-check-section-title"><i class="fas fa-user-check"></i><span>الحسابات التي تعمل توكناتها</span></div>';
+    h += '<div class="expired-list" style="max-height:150px">';
+    for (var a = 0; a < active.length; a++){
+      h += '<div class="expired-account" style="background:rgba(0,200,83,.06);border-color:rgba(0,200,83,.18);color:#c9ffdd"><i class="fas fa-circle-check" style="color:#59ef96"></i><span>' + escH(active[a]) + '</span></div>';
+    }
+    h += '</div>';
+  }
+
+  if (unknown.length){
+    h += '<div class="token-check-section-title"><i class="fas fa-circle-question"></i><span>حسابات تعذّر التحقق منها</span></div>';
+    h += '<div class="expired-list" style="max-height:150px">';
+    for (var u = 0; u < unknown.length; u++){
+      h += '<div class="expired-account" style="background:rgba(255,193,7,.06);border-color:rgba(255,193,7,.22);color:#ffe6a3"><i class="fas fa-circle-question" style="color:#ffd966"></i><span>' + escH(unknown[u]) + '</span></div>';
+    }
+    h += '</div>';
+    h += '<div class="token-check-errors"><i class="fas fa-triangle-exclamation"></i> تعذّر التحقق من ' + unknown.length + ' حساب بعد إعادة المحاولة، لذلك لم تُحسب ضمن التوكنات العاملة أو المنتهية. جرّب الضغط على الفحص مرة أخرى.</div>';
+  }
+
+  var secs = (Math.round(elapsedMs / 100) / 10);
+  h += '<div class="token-check-note">تم الفحص خلال ' + secs + ' ثانية • الإجمالي: ' + list.length + ' حساب — يعمل: ' + active.length + ' • منتهي: ' + expired.length + ' • غامض: ' + unknown.length + '</div>';
+  content.innerHTML = h;
+}
+
+function openTokenCheck(){
+  var modal = $('tokenCheckModal'), content = $('tokenCheckContent');
+  if (!modal || !content){ return; }
+  modal.classList.add('open');
+  content.innerHTML = '<div class="token-check-loading"><div class="spinner"></div><span id="tcProg">جاري فحص الحسابات...</span></div>';
+  runTokenCheck();
+}
+function closeTokenCheck(){ var m = $('tokenCheckModal'); if (m){ m.classList.remove('open'); } }
+
+async function runTokenCheck(){
+  var content = $('tokenCheckContent');
+  if (!content){ return; }
+  if (_tcRunning){ return; }
+
+  var list = (typeof accounts !== 'undefined' && Array.isArray(accounts)) ? accounts.slice() : [];
+  if (!list.length){
+    content.innerHTML = '<div class="token-empty"><i class="fas fa-circle-info"></i><br>لا توجد حسابات في القائمة لفحصها.</div>';
+    return;
+  }
+
+  _tcRunning = true;
+  var started = Date.now();
+  var total = list.length;
+  var done = 0;
+  var results = new Array(total);
+
+  function paint(prefix){
+    var el = $('tcProg');
+    if (el){ el.textContent = (prefix || 'جاري فحص') + ' ' + done + ' / ' + total + ' ...'; }
+  }
+
+  content.innerHTML = '<div class="token-check-loading"><div class="spinner"></div><span id="tcProg">جاري فحص 0 / ' + total + ' ...</span></div>';
+
+  try {
+    await _tcRunLimited(list, _TC_CONCURRENCY, async function(bot, i){
+      var r;
+      try { r = await checkSingleTokenStatus(bot); }
+      catch(e){ r = { status:'unknown', error:String((e && e.message) || e) }; }
+      results[i] = r;
+      done++;
+      paint('جاري فحص');
+    });
+
+    /* إعادة محاولة واحدة للحسابات الغامضة */
+    var pending = [];
+    for (var i = 0; i < total; i++){
+      if (!results[i] || results[i].status === 'unknown'){ pending.push(i); }
+    }
+    if (pending.length){
+      done = total - pending.length;
+      paint('إعادة محاولة الفحص');
+      await _tcRunLimited(pending, _TC_RETRY_CONCURRENCY, async function(idx){
+        var r2;
+        try { r2 = await checkSingleTokenStatus(list[idx]); }
+        catch(e){ r2 = { status:'unknown', error:String((e && e.message) || e) }; }
+        if (r2 && r2.status && r2.status !== 'unknown'){ results[idx] = r2; }
+        done++;
+        paint('إعادة محاولة الفحص');
+      });
+    }
+  } catch(err){
+    _tcRunning = false;
+    var ok = 0;
+    for (var q = 0; q < total; q++){ if (results[q]){ ok++; } }
+    if (ok){ _tcRender(results, list, Date.now() - started); }
+    else { content.innerHTML = '<div class="token-check-errors"><i class="fas fa-triangle-exclamation"></i> حدث خطأ أثناء الفحص: ' + escH(String((err && err.message) || err)) + '<br>حاول مرة أخرى.</div>'; }
+    return;
+  }
+
+  _tcRunning = false;
+  _tcRender(results, list, Date.now() - started);
+}
+
+</script>
 </body></html>
