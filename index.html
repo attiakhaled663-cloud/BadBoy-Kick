@@ -3080,8 +3080,109 @@ function escH(s) {
 // ═══════════════════════════════════════
 function openTokenCheck(){var modal=$('tokenCheckModal'),content=$('tokenCheckContent');if(!modal||!content)return;modal.classList.add('open');content.innerHTML='<div class="token-check-loading"><div class="spinner"></div>جاري فحص الحسابات...</div>';runTokenCheck()}
 function closeTokenCheck(){var modal=$('tokenCheckModal');if(modal)modal.classList.remove('open')}
-async function checkSingleTokenStatus(bot){var token=String(bot&&bot.token||'').trim();if(!token)return{status:'expired',username:bot&&bot.username?bot.username:'حساب بدون توكن'};if(token.toLowerCase().startsWith('bearer '))token=token.substring(7).trim();var endpoints=['/api/v1/user','/api/v2/user'];var sawExpired=false,lastError=null;for(var ei=0;ei<endpoints.length;ei++){try{var pr=await proxiedFetch(endpoints[ei],{token:token,timeout:7000,preferredProxy:(bot.workingProxy!==undefined?bot.workingProxy:undefined)});if(pr&&pr.res&&pr.res.ok)return{status:'active'};var code=pr&&pr.res?pr.res.status:0;if(code===401||code===403){sawExpired=true;continue}lastError=new Error('HTTP '+code)}catch(e){lastError=e}}if(sawExpired)return{status:'expired',username:bot.username||'حساب غير مسمى'};return{status:'unknown',error:lastError?lastError.message:'تعذر التحقق'}}
-async function runTokenCheck(){var content=$('tokenCheckContent');if(!content)return;var list=Array.isArray(accounts)?accounts.slice():[];if(!list.length){content.innerHTML='<div class="token-empty"><i class="fas fa-circle-info"></i><br>لا توجد حسابات في القائمة لفحصها.</div>';return}var results=await Promise.all(list.map(function(bot){return checkSingleTokenStatus(bot)}));var expired=[],activeCount=0,unknownCount=0;for(var i=0;i<results.length;i++){if(results[i].status==='expired')expired.push(results[i].username||list[i].username||('حساب #'+(i+1)));else if(results[i].status==='active')activeCount++;else unknownCount++}var html='<div class="token-check-stats">';html+='<div class="token-stat expired"><div class="ts-icon"><i class="fas fa-triangle-exclamation"></i></div><div class="ts-num">'+expired.length+'</div><div class="ts-label">توكن منتهي</div></div>';html+='<div class="token-stat active"><div class="ts-icon"><i class="fas fa-circle-check"></i></div><div class="ts-num">'+activeCount+'</div><div class="ts-label">توكن يعمل</div></div></div>';html+='<div class="token-check-section-title"><i class="fas fa-user-xmark"></i><span>الحسابات التي انتهت توكناتها</span></div>';if(expired.length){html+='<div class="expired-list">';expired.forEach(function(name){html+='<div class="expired-account"><i class="fas fa-circle-xmark"></i><span>'+escH(name)+'</span></div>'});html+='</div>'}else{html+='<div class="token-empty"><i class="fas fa-shield-check"></i><br>لا يوجد أي حساب بتوكن منتهي.</div>'}if(unknownCount)html+='<div class="token-check-errors"><i class="fas fa-triangle-exclamation"></i> تعذر التحقق من '+unknownCount+' حساب بسبب مشكلة في الاتصال، لذلك لم تُحسب ضمن التوكنات العاملة أو المنتهية.</div>';html+='<div class="token-check-note">يُعتبر التوكن منتهيًا عند رفضه من خادم Kick بحالة 401 أو 403.</div>';content.innerHTML=html}
+
+/*
+ * فحص حالة التوكنات — نفس آلية التحقق المستخدمة عند إضافة التوكن:
+ * 1) نفس نقاط API
+ * 2) نفس طريقة إرسال التوكن
+ * 3) نفس اعتبار 401/403 = توكن منتهي
+ * 4) نفس قراءة بيانات الحساب من الاستجابة
+ * 5) لا نعتبر الاستجابة ناجحة إلا إذا كانت JSON وتحتوي على بيانات حساب
+ */
+async function checkSingleTokenStatus(bot){
+    var token=String(bot&&bot.token||'').trim();
+    if(!token)return{status:'expired',username:bot&&bot.username?bot.username:'حساب بدون توكن'};
+
+    if(token.toLowerCase().startsWith('bearer '))token=token.substring(7).trim();
+
+    var pr=null;
+    var endpoints=['/api/v1/user','/api/v2/user'];
+
+    for(var ei=0;ei<endpoints.length && (!pr||!pr.res.ok);ei++){
+        try{
+            pr=await proxiedFetch(endpoints[ei],{token:token,timeout:6000});
+        }catch(e){
+            continue;
+        }
+    }
+
+    if(!pr){
+        return{status:'unknown',error:'فشل الاتصال — تحققي من الإنترنت'};
+    }
+
+    if(!pr.res.ok){
+        if(pr.res.status===401||pr.res.status===403){
+            return{status:'expired',username:bot&&bot.username?bot.username:'حساب غير مسمى'};
+        }
+        return{status:'unknown',error:'خطأ HTTP: '+pr.res.status};
+    }
+
+    var raw,data;
+    try{
+        raw=await pr.res.text();
+        data=JSON.parse(raw);
+    }catch(e){
+        return{status:'unknown',error:'الخادم لم يُرجع بيانات صالحة'};
+    }
+
+    var username=data.username ||
+        (data.user&&data.user.username) ||
+        (data.data&&data.data.username) ||
+        data.slug ||
+        data.name ||
+        null;
+
+    if(!username && !data.id){
+        return{status:'unknown',error:'لم يتم العثور على بيانات الحساب'};
+    }
+
+    return{status:'active',username:username||bot.username||('حساب #'+(data.id||'?'))};
+}
+
+async function runTokenCheck(){
+    var content=$('tokenCheckContent');if(!content)return;
+    var list=Array.isArray(accounts)?accounts.slice():[];
+
+    if(!list.length){
+        content.innerHTML='<div class="token-empty"><i class="fas fa-circle-info"></i><br>لا توجد حسابات في القائمة لفحصها.</div>';
+        return;
+    }
+
+    var results=await Promise.all(list.map(function(bot){return checkSingleTokenStatus(bot)}));
+    var expired=[],activeCount=0,unknownCount=0;
+
+    for(var i=0;i<results.length;i++){
+        if(results[i].status==='expired'){
+            expired.push(list[i].username||results[i].username||('حساب #'+(i+1)));
+        }else if(results[i].status==='active'){
+            activeCount++;
+        }else{
+            unknownCount++;
+        }
+    }
+
+    var html='<div class="token-check-stats">';
+    html+='<div class="token-stat expired"><div class="ts-icon"><i class="fas fa-triangle-exclamation"></i></div><div class="ts-num">'+expired.length+'</div><div class="ts-label">توكن منتهي</div></div>';
+    html+='<div class="token-stat active"><div class="ts-icon"><i class="fas fa-circle-check"></i></div><div class="ts-num">'+activeCount+'</div><div class="ts-label">توكن يعمل</div></div></div>';
+    html+='<div class="token-check-section-title"><i class="fas fa-user-xmark"></i><span>الحسابات التي انتهت توكناتها</span></div>';
+
+    if(expired.length){
+        html+='<div class="expired-list">';
+        expired.forEach(function(name){
+            html+='<div class="expired-account"><i class="fas fa-circle-xmark"></i><span>'+escH(name)+'</span></div>';
+        });
+        html+='</div>';
+    }else{
+        html+='<div class="token-empty"><i class="fas fa-shield-check"></i><br>لا يوجد أي حساب بتوكن منتهي.</div>';
+    }
+
+    if(unknownCount){
+        html+='<div class="token-check-errors"><i class="fas fa-triangle-exclamation"></i> تعذر التحقق من '+unknownCount+' حساب بسبب مشكلة في الاتصال، لذلك لم تُحسب ضمن التوكنات العاملة أو المنتهية.</div>';
+    }
+
+    html+='<div class="token-check-note">يستخدم الفحص نفس طريقة التحقق الموجودة عند إضافة التوكن، بما في ذلك التحقق من بيانات الحساب بعد نجاح الاستجابة.</div>';
+    content.innerHTML=html;
+}
 
 async function verifyAndAdd() {
     var token = $('inToken').value.trim();
