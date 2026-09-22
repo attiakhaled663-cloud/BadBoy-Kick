@@ -802,7 +802,7 @@ body {
         <div class="modal-x" onclick="closeTokenCheck()" title="إغلاق"><i class="fas fa-xmark"></i></div>
         <div class="modal-head"><div class="modal-icon"><i class="fas fa-magnifying-glass"></i></div><div class="modal-title">فحص حالة التوكنات</div></div>
         <div class="modal-divider"></div>
-        <div id="tokenCheckContent" class="token-check-content"><div class="token-check-loading"><div class="spinner"></div>جاري فحص الحسابات...</div></div>
+        <div id="tokenCheckContent" class="token-check-content"><div class="token-check-loading"><div class="spinner"></div>جاري فحص التوكنات...</div></div>
         <div class="modal-actions"><button class="btn btn-ghost" onclick="closeTokenCheck()"><i class="fas fa-xmark"></i> إغلاق</button></div>
     </div>
 </div>
@@ -3082,147 +3082,197 @@ function openTokenCheck(){var modal=$('tokenCheckModal'),content=$('tokenCheckCo
 function closeTokenCheck(){var modal=$('tokenCheckModal');if(modal)modal.classList.remove('open')}
 
 /* ============================================================
- * ✅ فحص حالة التوكنات (نسخة مُصحّحة)
- *  - لا تُعتبر الاستجابة ناجحة إلا عند وجود كائن مستخدم حقيقي (username).
- *  - أي 401/403 أو رسالة عدم مصادقة = توكن منتهي.
- *  - استجابة تملك id فقط (زائر/بيانات عامة) لا تُحسب "شغّالة".
- *  - تمنع التخزين المؤقت عبر مُعامل زمني.
+ * ✅ فحص حالة التوكنات (نسخة v2 مُصحّحة ومحسّنة)
+ *  - تصنيف دقيق ثلاثي: يعمل / منتهي / تعذّر الفحص (مع إعادة محاولة تلقائية).
+ *  - "يعمل": فقط عند تأكيد وجود بيانات مستخدم حقيقية (username) مرتبطة بالتوكن.
+ *  - "منتهي": أي 401/403 أو رسالة عدم مصادقة صريحة من بروكسي موثوق، مع عدم وجود أي استجابة ناجحة.
+ *  - تشغيل محدود التزامن (Concurrency) لمنع حظر البروكسيات المجانية وحلّ مشكلة "فحص 10 فقط".
+ *  - إعادة محاولة تلقائية للحسابات التي تعذّر فحصها في جولة ثانية أبطأ حتى تُفحَص كل الحسابات.
  * ============================================================ */
-async function checkSingleTokenStatus(bot){
-    var token=String(bot&&bot.token||'').trim();
-    var fallbackName=(bot&&bot.username)||('حساب');
-    if(!token)return{status:'expired',username:fallbackName};
+function _sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
-    if(token.toLowerCase().startsWith('bearer '))token=token.substring(7).trim();
-
-    var pr=null;
-    var endpoints=['/api/v1/user','/api/v2/user'];
-    var cacheBust='?_='+Date.now()+'_'+Math.random().toString(36).slice(2);
-
-    for(var ei=0;ei<endpoints.length;ei++){
-        try{
-            var attempt=await proxiedFetch(endpoints[ei]+cacheBust,{token:token,timeout:8000});
-            if(attempt&&attempt.res){
-                pr=attempt;
-                // ✅ نتوقف عند استجابة واضحة: نجاح أو رفض مصادقة صريح
-                if(attempt.res.ok||attempt.res.status===401||attempt.res.status===403)break;
-            }
-        }catch(e){continue;}
-    }
-
-    if(!pr){
-        return{status:'unknown',error:'فشل الاتصال — تحققي من الإنترنت'};
-    }
-
-    // ✅ 401/403 = التوكن منتهي أو غير صالح
-    if(pr.res.status===401||pr.res.status===403){
-        return{status:'expired',username:fallbackName};
-    }
-
-    if(!pr.res.ok){
-        return{status:'unknown',error:'خطأ HTTP: '+pr.res.status};
-    }
-
-    var raw;
-    try{ raw=await pr.res.text(); }
-    catch(e){ return{status:'unknown',error:'تعذر قراءة استجابة الخادم'}; }
-
-    // ✅ بعض البروكسيات تُعيد 200 حتى مع خطأ مصادقة — نفحص المحتوى يدوياً
-    var lower=String(raw||'').toLowerCase();
-    var hasUser=/"username"\s*:/.test(lower);
-    if(!hasUser && /(unauthenticated|unauthorized|invalid token|invalid_token|"token"\s*:\s*\[\s*\]|token has expired|expired token)/.test(lower)){
-        return{status:'expired',username:fallbackName};
-    }
-
-    var data;
-    try{ data=JSON.parse(raw); }
-    catch(e){ return{status:'unknown',error:'الخادم لم يُرجع بيانات صالحة'}; }
-
-    if(data && data.errors)return{status:'unknown',error:'الخادم رفض الطلب'};
-
-    // ✅ رسالة خطأ بدون بيانات مستخدم
-    if(data && data.message && !hasUser){
-        var msg=String(data.message);
-        if(/token|auth|unauthenticated|unauthorized|login|session|expired|invalid/i.test(msg)){
-            return{status:'expired',username:fallbackName};
+// ✅ مشغّل مهام محدود التزامن: يمنع إغراق البروكسيات بالطلبات المتزامنة
+async function _runLimited(items, limit, worker){
+    var results = new Array(items.length);
+    var idx = 0;
+    async function runner(){
+        while (idx < items.length){
+            var i = idx++;
+            try { results[i] = await worker(items[i], i); }
+            catch(e){ results[i] = { status:'unknown', error:String(e && e.message || e) }; }
         }
-        return{status:'unknown',error:msg};
+    }
+    var pool = [];
+    var n = Math.max(1, Math.min(limit, items.length));
+    for (var k = 0; k < n; k++) pool.push(runner());
+    await Promise.all(pool);
+    return results;
+}
+
+// ✅ البروكسيات الموثوقة في تمرير ترويسة Authorization (لتفادي الخطأ في تصنيف التوكن)
+var _AUTH_PROXIES = ['codetabs','corsproxy.org'];
+
+// ✅ طلب مباشر عبر بروكسي محدّد مع تمرير ترويسة المصادقة
+async function _rawProxied(path, token, pIdx, timeout){
+    var headers = { 'Accept':'application/json', 'Origin':KICK_BASE };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    if (xsrfToken) headers['X-XSRF-TOKEN'] = xsrfToken;
+    var url = PROXIES[pIdx].build(KICK_BASE + path);
+    return await Promise.race([
+        fetch(url, { method:'GET', headers:headers, credentials:'omit' }),
+        new Promise(function(_, reject){ setTimeout(function(){ reject(new Error('timeout')); }, timeout); })
+    ]);
+}
+
+async function checkSingleTokenStatus(bot){
+    var token = String(bot && bot.token || '').trim();
+    var fallbackName = (bot && bot.username) || ('حساب');
+    if (!token) return { status:'expired', username:fallbackName };
+    if (token.toLowerCase().startsWith('bearer ')) token = token.substring(7).trim();
+
+    var endpoints = ['/api/v1/user', '/api/v2/user'];
+    var order = getProxyOrder(bot && bot.workingProxy);
+    var cacheBust = '?_=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+
+    var sawTrustedAuthFail = false;
+    var sawAnyResponse = false;
+    var lastErr = null;
+
+    for (var ei = 0; ei < endpoints.length; ei++){
+        for (var oi = 0; oi < order.length; oi++){
+            var p = order[oi];
+            var pname = (PROXIES[p] || {}).name || '';
+            var isTrustedAuth = _AUTH_PROXIES.indexOf(pname) >= 0;
+            try {
+                var res = await _rawProxied(endpoints[ei] + cacheBust, token, p, 12000);
+                sawAnyResponse = true;
+
+                // ✅ 401/403 = رفض مصادقة (منتهي) — نثق بها فقط من بروكسي يمرّر الترويسة
+                if (res.status === 401 || res.status === 403){
+                    if (isTrustedAuth) sawTrustedAuthFail = true;
+                    continue;
+                }
+                if (!res.ok){ lastErr = 'HTTP ' + res.status; continue; }
+
+                var raw = '';
+                try { raw = await res.text(); } catch(e){ lastErr = 'read-fail'; continue; }
+                var lower = String(raw || '').toLowerCase();
+                var hasUser = /"username"\s*:/.test(lower);
+
+                // ✅ بعض البروكسيات تُعيد 200 حتى مع خطأ مصادقة — نفحص المحتوى يدوياً
+                if (!hasUser && /(unauthenticated|unauthorized|invalid token|invalid_token|token has expired|expired token|"token"\s*:\s*\[\s*\])/.test(lower)){
+                    if (isTrustedAuth) sawTrustedAuthFail = true;
+                    continue;
+                }
+
+                var data = null;
+                try { data = JSON.parse(raw); } catch(e){ lastErr = 'bad-json'; continue; }
+                if (data && data.errors){ lastErr = 'errors'; continue; }
+
+                if (data && data.message && !hasUser){
+                    var msg = String(data.message);
+                    if (/token|auth|unauthenticated|unauthorized|login|session|expired|invalid/i.test(msg)){
+                        if (isTrustedAuth) sawTrustedAuthFail = true;
+                        continue;
+                    }
+                }
+
+                // ✅ استخراج كائن المستخدم من الاستجابة
+                var src = data;
+                if (data){
+                    if (data.user && typeof data.user === 'object') src = data.user;
+                    else if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) src = data.data;
+                }
+                var username = (src && (src.username || src.slug || src.name)) || null;
+
+                // ✅ أي استجابة ناجحة تحمل اسم مستخدم حقيقي = التوكن يعمل → نتوقف فوراً
+                if (username) return { status:'active', username:username, proxy:p };
+            } catch(e){ lastErr = String(e && e.message || e); continue; }
+        }
     }
 
-    // ✅ استخراج كائن المستخدم من الاستجابة
-    var src=data;
-    if(data){
-        if(data.user && typeof data.user==='object')src=data.user;
-        else if(data.data && typeof data.data==='object' && !Array.isArray(data.data))src=data.data;
-    }
-    var username=(src && (src.username || src.slug || src.name)) || null;
+    // ✅ رفض مصادقة صريح من بروكسي موثوق = التوكن منتهي
+    if (sawTrustedAuthFail) return { status:'expired', username:fallbackName };
 
-    // ✅ "شغّال" فقط عند وجود اسم مستخدم حقيقي مرتبط بالتوكن
-    //    (id وحده قد يكون بيانات زائر/عامة → لا يُحتسب)
-    if(username){
-        return{status:'active',username:username};
-    }
+    // ✅ استجاب الخادم لكن دون تأكيد بيانات مستخدم (احتمال حجب أو بيانات زائر)
+    if (sawAnyResponse) return { status:'unknown', error:'استجابة بدون بيانات مستخدم' };
 
-    return{status:'unknown',error:'لم يتم العثور على بيانات حساب مرتبطة بالتوكن'};
+    return { status:'unknown', error:lastErr || 'فشل الاتصال — تحقق من الإنترنت' };
 }
 
 async function runTokenCheck(){
-    var content=$('tokenCheckContent');if(!content)return;
-    var list=Array.isArray(accounts)?accounts.slice():[];
+    var content = $('tokenCheckContent'); if (!content) return;
+    var list = Array.isArray(accounts) ? accounts.slice() : [];
 
-    if(!list.length){
-        content.innerHTML='<div class="token-empty"><i class="fas fa-circle-info"></i><br>لا توجد حسابات في القائمة لفحصها.</div>';
+    if (!list.length){
+        content.innerHTML = '<div class="token-empty"><i class="fas fa-circle-info"></i><br>لا توجد حسابات في القائمة لفحصها.</div>';
         return;
     }
 
-    var results=await Promise.all(list.map(function(bot){return checkSingleTokenStatus(bot)}));
-    var expired=[],activeNames=[],activeCount=0,unknownCount=0;
+    content.innerHTML = '<div class="token-check-loading"><div class="spinner"></div>جاري فحص ' + list.length + ' حساب...</div>';
 
-    for(var i=0;i<results.length;i++){
-        var b=list[i], r=results[i];
-        var displayName=(b&&b.username)||r.username||('حساب #'+(i+1));
-        if(r.status==='expired'){
-            expired.push(displayName);
-        }else if(r.status==='active'){
-            activeCount++;
-            activeNames.push(r.username||displayName);
-        }else{
-            unknownCount++;
-        }
+    // ✅ تشغيل محدود التزامن (5 حسابات في وقت واحد) — يمنع حظر البروكسيات ويضمن فحص كل الحسابات
+    var results = await _runLimited(list, 5, function(bot){ return checkSingleTokenStatus(bot); });
+
+    // ✅ إعادة محاولة تلقائية للحسابات التي تعذّر فحصها (جولة ثانية أبطأ واحداً تلو الآخر)
+    var retryIdx = [];
+    for (var i = 0; i < results.length; i++){ if (results[i] && results[i].status === 'unknown') retryIdx.push(i); }
+    for (var r = 0; r < retryIdx.length; r++){
+        await _sleep(400);
+        try {
+            var again = await checkSingleTokenStatus(list[retryIdx[r]]);
+            if (again && again.status !== 'unknown') results[retryIdx[r]] = again;
+        } catch(e){}
     }
 
-    var html='<div class="token-check-stats">';
-    html+='<div class="token-stat expired"><div class="ts-icon"><i class="fas fa-triangle-exclamation"></i></div><div class="ts-num">'+expired.length+'</div><div class="ts-label">توكن منتهي</div></div>';
-    html+='<div class="token-stat active"><div class="ts-icon"><i class="fas fa-circle-check"></i></div><div class="ts-num">'+activeCount+'</div><div class="ts-label">توكن يعمل</div></div></div>';
+    var expired = [], activeNames = [], unknownNames = [], activeCount = 0;
+    for (var j = 0; j < results.length; j++){
+        var b = list[j], res = results[j];
+        var displayName = (b && b.username) || (res && res.username) || ('حساب #' + (j + 1));
+        if (res && res.status === 'expired'){ expired.push(displayName); }
+        else if (res && res.status === 'active'){ activeCount++; activeNames.push(res.username || displayName); }
+        else { unknownNames.push(displayName); }
+    }
+
+    var html = '<div class="token-check-stats">';
+    html += '<div class="token-stat expired"><div class="ts-icon"><i class="fas fa-triangle-exclamation"></i></div><div class="ts-num">' + expired.length + '</div><div class="ts-label">توكن منتهي</div></div>';
+    html += '<div class="token-stat active"><div class="ts-icon"><i class="fas fa-circle-check"></i></div><div class="ts-num">' + activeCount + '</div><div class="ts-label">توكن يعمل</div></div></div>';
 
     // ✅ قائمة الحسابات المنتهية (بالأسماء)
-    html+='<div class="token-check-section-title"><i class="fas fa-user-xmark"></i><span>الحسابات التي انتهت توكناتها</span></div>';
-    if(expired.length){
-        html+='<div class="expired-list">';
+    html += '<div class="token-check-section-title"><i class="fas fa-user-xmark"></i><span>الحسابات التي انتهت توكناتها</span></div>';
+    if (expired.length){
+        html += '<div class="expired-list">';
         expired.forEach(function(name){
-            html+='<div class="expired-account"><i class="fas fa-circle-xmark"></i><span>'+escH(name)+'</span></div>';
+            html += '<div class="expired-account"><i class="fas fa-circle-xmark"></i><span>' + escH(name) + '</span></div>';
         });
-        html+='</div>';
-    }else{
-        html+='<div class="token-empty"><i class="fas fa-shield-check"></i><br>لا يوجد أي حساب بتوكن منتهي.</div>';
+        html += '</div>';
+    } else {
+        html += '<div class="token-empty"><i class="fas fa-shield-check"></i><br>لا يوجد أي حساب بتوكن منتهي.</div>';
     }
 
-    // ✅ قائمة الحسابات الشغّالة (بالأسماء) — للتوضيح
-    if(activeNames.length){
-        html+='<div class="token-check-section-title"><i class="fas fa-user-check"></i><span>الحسابات التي تعمل توكناتها</span></div>';
-        html+='<div class="expired-list" style="max-height:150px">';
+    // ✅ قائمة الحسابات الشغّالة (بالأسماء)
+    if (activeNames.length){
+        html += '<div class="token-check-section-title"><i class="fas fa-user-check"></i><span>الحسابات التي تعمل توكناتها</span></div>';
+        html += '<div class="expired-list" style="max-height:150px">';
         activeNames.forEach(function(name){
-            html+='<div class="expired-account" style="background:rgba(0,200,83,.06);border-color:rgba(0,200,83,.18);color:#c9ffdd"><i class="fas fa-circle-check" style="color:#59ef96"></i><span>'+escH(name)+'</span></div>';
+            html += '<div class="expired-account" style="background:rgba(0,200,83,.06);border-color:rgba(0,200,83,.18);color:#c9ffdd"><i class="fas fa-circle-check" style="color:#59ef96"></i><span>' + escH(name) + '</span></div>';
         });
-        html+='</div>';
+        html += '</div>';
     }
 
-    if(unknownCount){
-        html+='<div class="token-check-errors"><i class="fas fa-triangle-exclamation"></i> تعذر التحقق من '+unknownCount+' حساب بسبب مشكلة في الاتصال، لذلك لم تُحسب ضمن التوكنات العاملة أو المنتهية.</div>';
+    // ✅ قائمة الحسابات التي تعذّر فحصها (بالأسماء) — للشفافية
+    if (unknownNames.length){
+        html += '<div class="token-check-section-title"><i class="fas fa-circle-question"></i><span>حسابات تعذّر التحقق منها</span></div>';
+        html += '<div class="expired-list" style="max-height:150px">';
+        unknownNames.forEach(function(name){
+            html += '<div class="expired-account" style="background:rgba(255,193,7,.06);border-color:rgba(255,193,7,.22);color:#ffe6a3"><i class="fas fa-circle-question" style="color:#ffd966"></i><span>' + escH(name) + '</span></div>';
+        });
+        html += '</div>';
+        html += '<div class="token-check-errors"><i class="fas fa-triangle-exclamation"></i> تعذّر التحقق من ' + unknownNames.length + ' حساب بعد إعادة المحاولة، لذلك لم تُحسب ضمن التوكنات العاملة أو المنتهية.</div>';
     }
 
-    html+='<div class="token-check-note">يُعدّ الحساب "شغّالاً" فقط عند تأكيد وجود بيانات مستخدم حقيقية مرتبطة بالتوكن؛ أي استجابة بدون اسم مستخدم صالح أو برسالة عدم مصادقة تُعدّ منتهية.</div>';
-    content.innerHTML=html;
+    html += '<div class="token-check-note">يُعدّ الحساب "شغّالاً" فقط عند تأكيد وجود بيانات مستخدم حقيقية مرتبطة بالتوكن؛ أي استجابة بدون اسم مستخدم صالح أو برسالة عدم مصادقة تُعدّ منتهية.</div>';
+    content.innerHTML = html;
 }
 
 async function verifyAndAdd() {
