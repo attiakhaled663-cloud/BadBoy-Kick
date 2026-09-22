@@ -1030,6 +1030,36 @@ body {
     </div>
 </div>
 
+<!-- ✅ نافذة استثناء القنوات — إرسال دائم في كل الحالات -->
+<div class="modal-overlay" id="exemptModal" onclick="if(event.target===this)closeExemptModal()">
+    <div class="modal">
+        <div class="modal-x" onclick="closeExemptModal()" title="إغلاق"><i class="fas fa-xmark"></i></div>
+        <div class="modal-head">
+            <div class="modal-icon"><i class="fas fa-star"></i></div>
+            <div class="modal-title">استثناء قنوات</div>
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-desc" style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.7">
+            اختر القنوات التي تريد استثناءها من قائمة كل القنوات المضافة في حساباتك. القنوات المستثناة تُرسل لها الرسائل في <b style="color:var(--accent)">كل الحالات</b> — سواء كانت طالعة لايف أو قافلة اللايف.
+        </div>
+        <div class="modal-field" style="margin-bottom:8px">
+            <input type="text" id="exemptSearch" placeholder="ابحث عن قناة..." oninput="renderExemptList()" style="padding:9px 11px;font-size:13px;border-radius:9px">
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:10px;color:var(--muted);font-weight:700"><i class="fas fa-list"></i> القنوات المضافة في الحسابات</span>
+            <span style="font-size:10px;color:var(--accent);font-weight:900" id="exemptCount">0 مستثناة</span>
+        </div>
+        <div class="channels-list" id="exemptList" style="max-height:300px;overflow-y:auto"></div>
+        <div class="modal-actions" style="margin-top:10px">
+            <button class="btn btn-fire" onclick="exemptSelectAll(true)"><i class="fas fa-check-double"></i> تحديد الكل</button>
+            <button class="btn btn-ghost" onclick="exemptSelectAll(false)"><i class="fas fa-xmark"></i> مسح الاستثناء</button>
+        </div>
+        <div class="modal-actions" style="margin-top:6px">
+            <button class="btn btn-ghost" onclick="closeExemptModal()"><i class="fas fa-xmark"></i> إغلاق</button>
+        </div>
+    </div>
+</div>
+
 <!-- ✅ نافذة تأكيد الحذف -->
 <div class="modal-overlay" id="confirmDeleteModal" style="z-index:2000" onclick="if(event.target===this)closeConfirmDelete()">
     <div class="modal" style="max-width:340px;text-align:center">
@@ -1296,6 +1326,11 @@ body {
                 <span class="ht-label">غير مباشر</span>
                 <div class="toggle" id="tgSendNonLive"></div>
             </div>
+            <!-- ✅ استثناء قنوات — إرسال دائم في كل الحالات (مباشر أو موقوف) -->
+            <button class="btn btn-ghost btn-xs" onclick="openExemptModal()" title="استثناء قنوات — تُرسل لها الرسائل دائماً في كل حالاتها، حتى لو كان بثّها موقوفاً" style="flex-shrink:0;position:relative">
+                <i class="fas fa-star"></i>
+                <span id="exemptBadge" style="display:none;position:absolute;top:-5px;left:-5px;min-width:15px;height:15px;border-radius:8px;background:var(--accent);color:#000;font-size:9px;font-weight:900;align-items:center;justify-content:center;padding:0 3px"></span>
+            </button>
         </div>
 
         <div class="bot-list" id="botList"></div>
@@ -2007,6 +2042,170 @@ function toggleSendToNonLive() {
     toast(sendToNonLive ? 'تم تفعيل الإرسال لغير المباشر — كل القنوات' : 'تم تفعيل الإرسال للبث المباشر فقط', 'i');
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  ✅ استثناء قنوات — إرسال دائم في كل الحالات (مباشر أو موقوف)
+//  القناة المستثناة تُرسل لها الرسائل دائماً حتى لو كان بثّها موقوفاً
+//  مستقل تماماً عن زر (غير مباشر): هذا استثناء لقنوات محددة فقط
+// ═══════════════════════════════════════════════════════════════
+var EXEMPT_KEY = 'redkick_exempt_channels_v1';
+var exemptChannels = []; // أسماء القنوات المستثناة (بصيغة موحّدة بلا @ وبحروف صغيرة)
+
+// ✅ توحيد اسم القناة للمقارنة (إزالة @ والمسافات وتوحيد الحروف)
+function normSlug(s) {
+    return String(s || '').trim().replace(/^@+/, '').toLowerCase();
+}
+
+function loadExemptChannels() {
+    try {
+        var raw = localStorage.getItem(EXEMPT_KEY);
+        if (!raw) return;
+        var arr = JSON.parse(raw);
+        if (Array.isArray(arr)) exemptChannels = arr.map(normSlug).filter(Boolean);
+    } catch(e) { exemptChannels = []; }
+}
+function saveExemptChannels() {
+    try { localStorage.setItem(EXEMPT_KEY, JSON.stringify(exemptChannels)); } catch(e) {}
+}
+
+// ✅ هل هذه القناة مستثناة؟ (تُرسل في كل الحالات)
+function isExemptChannel(slug) {
+    var n = normSlug(slug);
+    if (!n) return false;
+    return exemptChannels.indexOf(n) !== -1;
+}
+
+function addExemptChannel(slug) {
+    var n = normSlug(slug);
+    if (!n) { toast('اكتب اسم القناة أولاً', 'e'); return false; }
+    if (isExemptChannel(n)) { toast('القناة مستثناة بالفعل: ' + n, 'i'); return false; }
+    exemptChannels.push(n);
+    saveExemptChannels();
+    toast('تم استثناء القناة: ' + n + ' — ستُرسل لها الرسائل في كل الحالات', 's');
+    return true;
+}
+function removeExemptChannel(slug) {
+    var n = normSlug(slug);
+    var idx = exemptChannels.indexOf(n);
+    if (idx === -1) return false;
+    exemptChannels.splice(idx, 1);
+    saveExemptChannels();
+    toast('تم إلغاء استثناء القناة: ' + n, 'i');
+    return true;
+}
+function toggleExemptChannel(slug) {
+    if (isExemptChannel(slug)) removeExemptChannel(slug); else addExemptChannel(slug);
+    renderExemptList();
+    updateExemptBadge();
+    // ✅ حدّث قائمة القنوات داخل نافذة الإعدادات إن كانت مفتوحة
+    if (activeModalBotId !== null) {
+        var b = findBot(activeModalBotId);
+        if (b) renderChannelsList(b);
+    }
+}
+
+// ✅ عدّاد صغير على زر الاستثناء في الترويسة
+function updateExemptBadge() {
+    var el = document.getElementById('exemptBadge');
+    if (!el) return;
+    var n = exemptChannels.length;
+    if (n > 0) { el.style.display = 'inline-flex'; el.textContent = n > 99 ? '99+' : String(n); }
+    else { el.style.display = 'none'; el.textContent = ''; }
+}
+
+function openExemptModal() {
+    var s = document.getElementById('exemptSearch');
+    if (s) s.value = '';
+    renderExemptList();
+    var m = document.getElementById('exemptModal');
+    if (m) m.classList.add('open');
+}
+function closeExemptModal() {
+    var m = document.getElementById('exemptModal');
+    if (m) m.classList.remove('open');
+}
+
+// ✅ جمع كل القنوات المضافة في كل الحسابات (مع اسم البوت المالكة)
+function collectAllChannels() {
+    var out = [];
+    var seen = {};
+    for (var bi = 0; bi < accounts.length; bi++) {
+        var b = accounts[bi];
+        var chs = b.channels || [];
+        for (var ci = 0; ci < chs.length; ci++) {
+            var c = chs[ci];
+            var n = normSlug(c.slug);
+            if (!n) continue;
+            var key = n;
+            if (seen[key]) { seen[key].bots.push(b.username); continue; }
+            var item = { slug: n, display: c.slug, bots: [b.username], isLive: (c.isLive === true ? true : (c.isLive === false ? false : null)) };
+            seen[key] = item;
+            out.push(item);
+        }
+    }
+    // ✅ أضف أي قنوات مستثناة سابقاً ولم تعد موجودة بأي بوت
+    for (var ei = 0; ei < exemptChannels.length; ei++) {
+        var en = exemptChannels[ei];
+        if (!seen[en]) out.push({ slug: en, display: en, bots: [], isLive: null, orphan: true });
+    }
+    return out;
+}
+
+// ✅ عرض كل قنوات الحسابات كقائمة اختيار (checkboxes) — المستثناة معلّمة مسبقاً
+function renderExemptList() {
+    var box = document.getElementById('exemptList');
+    if (!box) return;
+    var all = collectAllChannels();
+    var q = '';
+    var sEl = document.getElementById('exemptSearch');
+    if (sEl) q = normSlug(sEl.value);
+    var list = q ? all.filter(function(it){ return it.slug.indexOf(q) !== -1; }) : all;
+
+    // ✅ عدّاد المستثنى
+    var cntEl = document.getElementById('exemptCount');
+    if (cntEl) cntEl.textContent = exemptChannels.length + ' مستثناة';
+
+    if (all.length === 0) {
+        box.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:11px"><i class="fas fa-tv" style="font-size:22px;display:block;margin-bottom:6px;color:var(--border)"></i>لا توجد قنوات مضافة بعد — أضف قناة لأي حساب أولاً</div>';
+        return;
+    }
+    if (list.length === 0) {
+        box.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:11px"><i class="fas fa-magnifying-glass" style="font-size:20px;display:block;margin-bottom:6px;color:var(--border)"></i>لا توجد نتائج مطابقة للبحث</div>';
+        return;
+    }
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        var on = isExemptChannel(it.slug);
+        var liveTxt = it.isLive === true ? 'مباشر' : (it.isLive === false ? 'غير مباشر' : 'غير معروف');
+        var liveCls = it.isLive === true ? 'live' : (it.isLive === false ? 'off' : '');
+        var botsTxt = (it.bots && it.bots.length) ? (' • ' + it.bots.join(', ')) : ' • غير موجود بأي بوت حالياً';
+        var safe = String(it.slug).replace(/'/g, "\\'");
+        html += '<div class="channel-card" onclick="toggleExemptChannel(\'' + safe + '\')" style="margin-bottom:6px;cursor:pointer;' + (on ? 'border-color:var(--accent);background:rgba(83,252,24,.08)' : '') + '">';
+        html += '<div class="bot-checkbox ' + (on ? 'checked' : '') + '" style="flex-shrink:0">' + (on ? '<i class="fas fa-check"></i>' : '') + '</div>';
+        html += '<div style="flex:1;min-width:0">';
+        html += '<div class="channel-name">' + escH(it.display || it.slug) + '<span class="channel-live-dot ' + liveCls + '" title="' + liveTxt + '"></span></div>';
+        html += '<div class="channel-meta"><span class="meta-item" style="color:' + (on ? '#7dffb0' : 'var(--muted)') + '"><i class="fas fa-paper-plane"></i> ' + (on ? 'مستثناة — إرسال في كل الحالات' : 'عادية — البث المباشر فقط') + '</span><span class="meta-item"><i class="fas fa-user"></i>' + escH(botsTxt) + '</span></div>';
+        html += '</div></div>';
+    }
+    box.innerHTML = html;
+}
+
+// ✅ تحديد الكل / مسح الاستثناء من داخل النافذة
+function exemptSelectAll(on) {
+    var all = collectAllChannels();
+    if (on) {
+        exemptChannels = all.map(function(it){ return it.slug; });
+    } else {
+        exemptChannels = [];
+    }
+    saveExemptChannels();
+    renderExemptList();
+    updateExemptBadge();
+    if (activeModalBotId !== null) { var b = findBot(activeModalBotId); if (b) renderChannelsList(b); }
+    toast(on ? 'تم استثناء كل القنوات (' + exemptChannels.length + ')' : 'تم مسح كل الاستثناءات', 'i');
+}
+
 function getEffectiveChannelSettings(ch, bot) {
     var u = bot ? getBotUnified(bot) : null;
     if (u && u.enabled) {
@@ -2020,11 +2219,13 @@ function getEffectiveChannelSettings(ch, bot) {
             delayMax: u.delayMax,
             randomMessages: u.randomMessages,
             sendToNonLive: sendToNonLive,
+            exempt: isExemptChannel(ch.slug),
             twoMessages: !!ch.twoMessages,
             fourMessages: !!ch.fourMessages
         };
     }
     ch.sendToNonLive = sendToNonLive;
+    ch.exempt = isExemptChannel(ch.slug);
     return ch;
 }
 
@@ -2152,6 +2353,8 @@ function generateTransferCode() {
             }),
             // ✅ حالة الإرسال لغير المباشر (كل القنوات وليس فقط البث المباشر)
             sendToNonLive: sendToNonLive,
+            // ✅ قنوات الاستثناء (إرسال دائم في كل الحالات)
+            exemptChannels: exemptChannels.slice(),
             // ✅ أفضل بروكسي محفوظ
             bestProxy: _bestProxy
         };
@@ -2388,6 +2591,14 @@ function importTransferCode() {
         sendToNonLive = data.sendToNonLive;
         saveSendToNonLive();
         setToggle('tgSendNonLive', sendToNonLive);
+    }
+
+    // ✅ استعادة قنوات الاستثناء (إرسال دائم في كل الحالات)
+    if (Array.isArray(data.exemptChannels)) {
+        exemptChannels = data.exemptChannels.map(normSlug).filter(Boolean);
+        saveExemptChannels();
+        updateExemptBadge();
+        if (typeof renderExemptList === 'function') renderExemptList();
     }
 
     // ✅ استعادة أفضل بروكسي محفوظ
@@ -3918,6 +4129,9 @@ function renderChannelsList(b) {
         var toggleCls = 'channel-toggle ' + (isEnabled ? 'on' : 'off');
         html += '<div class="' + toggleCls + '" onclick="toggleChannel(\'' + safeSlug + '\')" title="' + (isEnabled ? 'إطفاء' : 'تشغيل') + '"></div>';
         html += '<div class="channel-actions">';
+        // ✅ زر استثناء القناة — إرسال دائم في كل الحالات
+        var _exempt = isExemptChannel(ch.slug);
+        html += '<button class="btn btn-ghost" onclick="toggleExemptChannel(\'' + safeSlug + '\')" title="' + (_exempt ? 'إلغاء استثناء القناة' : 'استثناء القناة — إرسال دائم في كل الحالات') + '" style="color:' + (_exempt ? 'var(--accent)' : 'var(--muted)') + '"><i class="' + (_exempt ? 'fas' : 'far') + ' fa-star"></i></button>';
         html += '<button class="btn btn-fire" onclick="openChannelSettings(\'' + safeSlug + '\')" title="إعدادات القناة"><i class="fas fa-gear"></i></button>';
         html += '<button class="btn btn-ghost" onclick="mRemoveChannel(\'' + safeSlug + '\')" title="حذف"><i class="fas fa-trash"></i></button>';
         html += '</div>';
@@ -4627,6 +4841,8 @@ async function runChannelOnce(bot, ch, eff, msgs, interval, infinite, repeatCoun
     // ✅ السلوك الافتراضي: البوتات ترسل فقط للبث المباشر
     // ✅ إذا sendToNonLive=true: تخطّى فحص البث وأرسل لكل القنوات
     async function checkLiveNow() {
+        // ✅ قناة مستثناة: أرسل في كل الحالات — طالعة لايف أو قافلة اللايف
+        if (eff.exempt || isExemptChannel(slug)) return true;
         if (eff.sendToNonLive) return true;
         var now = Date.now();
         // ✅ كاش لمدة 10 ثوانٍ فقط — للكشف السريع عن إغلاق البث
@@ -5007,6 +5223,8 @@ async function init() {
     loadFromStorage();
     loadSendToNonLive(); // ✅ استعادة حالة زر الإرسال لغير المباشر
     setToggle('tgSendNonLive', sendToNonLive); // ✅ ضبط الزر في الترويسة
+    loadExemptChannels(); // ✅ استعادة قنوات الاستثناء (إرسال دائم في كل الحالات)
+    updateExemptBadge();  // ✅ ضبط عدّاد زر الاستثناء في الترويسة
     try { NetworkGuard.start(); } catch(e) {}
     fetchXsrf().catch(function(){});
     // ✅ تسخين البروكسيات مبكراً — يجد بروكسي شغال قبل أن يحاول المستخدم إضافة قناة
