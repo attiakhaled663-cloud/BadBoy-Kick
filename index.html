@@ -508,6 +508,9 @@
         .channels-list::-webkit-scrollbar { width:5px; }
         .channels-list::-webkit-scrollbar-thumb { background:rgba(83,252,24,.35); border-radius:3px; }
         .channels-list::-webkit-scrollbar-track { background:transparent; }
+        /* ✅ عمود قنوات مرن عشان القناة المطابقة تطلع فوق بالـ order بدون تغيير الترتيب */
+        .channels-list .channel-card { order: 0; }
+        #mChannelFilterHint { color: var(--accent2); }
 
         /* ✅ تبويبات فلترة قائمة القنوات: الكل / مباشر / OFF */
         .channels-filter-tabs { display:flex; gap:6px; margin-bottom:8px; }
@@ -1092,9 +1095,10 @@ body {
         <div class="modal-field">
             <label><i class="fas fa-hashtag"></i> إضافة قناة</label>
             <div class="row">
-                <input type="text" id="mChannelInput" placeholder="اسم القناة" onkeydown="if(event.key===&#39;Enter&#39;){event.preventDefault();mAddChannel();}">
+                <input type="text" id="mChannelInput" placeholder="اسم القناة" oninput="mFilterChannels()" onkeydown="if(event.key===&#39;Enter&#39;){event.preventDefault();mAddChannel();}">
                 <button class="btn btn-fire btn-sm" onclick="mAddChannel()"><i class="fas fa-plus"></i></button>
             </div>
+            <div class="hint" id="mChannelFilterHint" style="display:none"></div>
         </div>
 
         <!-- ✅ زر الإعدادات الموحدة الخاص بهذا الحساب فقط -->
@@ -3734,8 +3738,12 @@ function renderBotList() {
             statusText = 'جاهز';
             dotClass = 'idle';
         }
-        var sCount = b.channels.length;
-        var streamerInfo = sCount > 0 ? (sCount + ' قناة') : 'لا قنوات';
+        // ✅ اعرض عدد القنوات المفعّلة فقط
+        var sCount = 0;
+        for (var _ci = 0; _ci < b.channels.length; _ci++) {
+            if (b.channels[_ci].enabled !== false) sCount++;
+        }
+        var streamerInfo = sCount > 0 ? (sCount + ' قناة مفعّلة') : 'لا قنوات مفعّلة';
 
         html += '<div class="bot-card' + (isSelected ? ' selected' : '') + '">';
         // مربع التحديد
@@ -3953,16 +3961,31 @@ async function mAddChannel() {
     var chatroomId = null;
     var lastReason = null;
 
+    // ✅ جرّب الاسم زي ما اتكتب، ولو مالقيهوش جرّب تبديل (_) بـ (-) أو العكس
+    var slugVariants = [slug];
+    if (slug.indexOf('_') !== -1) {
+        var vDash = slug.replace(/_/g, '-');
+        if (slugVariants.indexOf(vDash) === -1) slugVariants.push(vDash);
+    }
+    if (slug.indexOf('-') !== -1) {
+        var vUnd = slug.replace(/-/g, '_');
+        if (slugVariants.indexOf(vUnd) === -1) slugVariants.push(vUnd);
+    }
+
     var delays = [2000, 3000, 5000, 8000, 12000];
-    for (var attempt = 1; attempt <= 6 && !chatroomId; attempt++) {
-        var result = await verifyChannelComprehensive(slug, b);
-        if (result.ok) {
-            chatroomId = result.chatroomId;
-        } else {
-            lastReason = result.reason;
-            if (lastReason === 'not_found') break;
-            if (attempt < 6) {
-                await new Promise(function(r){ setTimeout(r, delays[attempt-1] || 12000); });
+    for (var vi = 0; vi < slugVariants.length && !chatroomId; vi++) {
+        var trySlug = slugVariants[vi];
+        for (var attempt = 1; attempt <= 6 && !chatroomId; attempt++) {
+            var result = await verifyChannelComprehensive(trySlug, b);
+            if (result.ok) {
+                chatroomId = result.chatroomId;
+                slug = trySlug; // ✅ خزّن الصيغة اللي السيرفر قبلها فعلاً
+            } else {
+                lastReason = result.reason;
+                if (lastReason === 'not_found') break;
+                if (attempt < 6) {
+                    await new Promise(function(r){ setTimeout(r, delays[attempt-1] || 12000); });
+                }
             }
         }
     }
@@ -3989,10 +4012,11 @@ async function mAddChannel() {
                 continue;
             }
 
-            // ✅ أنشئ القناة بنفس الإعدادات لكل الحسابات
+            // ✅ أنشئ القناة بنفس الإعدادات لكل الحسابات — تُضاف مقفولة (غير مفعّلة)
             var channel = makeChannel(slug);
             channel.chatroomId = chatroomId;
             channel.verified = true;
+            channel.enabled = false; // ✅ تُضاف مقفولة — التفعيل يدوي
             acc.channels.push(channel);
             addedTo++;
         }
@@ -4026,11 +4050,14 @@ function mRemoveChannel(slug) {
     if (activeModalBotId === null) return;
     var b = findBot(activeModalBotId);
     if (!b) return;
-    askConfirmDelete('هل أنت متأكد من حذف القناة "' + slug + '"؟', function() {
+    askConfirmDelete('هل أنت متأكد من حذف القناة "' + slug + '" من كل البوتات؟', function() {
+        // ✅ احذفها من كل الحسابات مش من الحساب المفتوح بس
+        for (var i = 0; i < accounts.length; i++) {
+            accounts[i].channels = accounts[i].channels.filter(function(c){ return c.slug !== slug; });
+        }
         var bb = findBot(activeModalBotId);
-        if (!bb) return;
-        bb.channels = bb.channels.filter(function(c){ return c.slug !== slug; });
-        renderChannelsList(bb);
+        if (bb) renderChannelsList(bb);
+        renderBotList();
         persist();
     });
 }
@@ -4112,7 +4139,7 @@ function renderChannelsList(b) {
         var sentText = ch.sent > 0 ? ' • أرسل ' + ch.sent : '';
 
         var safeSlug = ch.slug.replace(/'/g, "\\'");
-        html += '<div class="' + cardCls + '">';
+        html += '<div class="' + cardCls + '" data-slug="' + escH(ch.slug) + '">';
         html += '<div class="channel-status ' + statusCls + '">' + statusText + '</div>';
         html += '<div style="flex:1;min-width:0">';
         var liveDotCls = ch.isLive === true ? 'live' : (ch.isLive === false ? 'off' : '');
@@ -4136,6 +4163,55 @@ function renderChannelsList(b) {
         html += '</div>';
     }
     box.innerHTML = html;
+    // ✅ أعِد تطبيق فلتر البحث لو الاسم مكتوب (إخفاء/إظهار العناصر فقط — بدون إعادة تحميل اللاعبين)
+    if (typeof mFilterChannels === 'function') mFilterChannels();
+}
+
+// ═══════════════════════════════════════
+//  ✅ بحث فوري في قائمة القنوات من مربع الإضافة
+//  - بيكتب وبس من غير أي زر: القناة المطابقة تطلع فوق والباقي يتخفي
+//  - الإخفاء بـ display فقط — اللاعبين والقنوات بيفضلوا شغالين زي ما هما
+//  - لما يمسح الاسم، كل القنوات تظهر تاني
+// ═══════════════════════════════════════
+function normArSearch(s) {
+    return String(s || '')
+        .toLowerCase()
+        .replace(/[\u064B-\u0652\u0640]/g, '')      // شيل التشكيل
+        .replace(/[\u0622\u0623\u0625\u0671]/g, '\u0627') // آ أ إ ٱ ← ا
+        .replace(/\u0649/g, '\u064A')               // ى ← ي
+        .replace(/\u0629/g, '\u0647')               // ة ← ه
+        .replace(/[\s\-_@#]/g, '');                 // تجاهل المسافات والشرطات والرموز
+}
+
+function mFilterChannels() {
+    var box = $('mChannelsList');
+    var inp = $('mChannelInput');
+    var hint = $('mChannelFilterHint');
+    if (!box || !inp) return;
+
+    var q = normArSearch(inp.value);
+    var cards = box.querySelectorAll('.channel-card');
+    var shown = 0;
+
+    for (var i = 0; i < cards.length; i++) {
+        var slug = cards[i].getAttribute('data-slug') || '';
+        var match = (!q) || (normArSearch(slug).indexOf(q) !== -1);
+        // ✅ إخفاء/إظهار فقط — مفيش أي إعادة رسم أو إيقاف للقناة
+        cards[i].style.display = match ? '' : 'none';
+        // ✅ القناة المطابقة تطلع فوق بدون تغيير ترتيب الـ DOM
+        cards[i].style.order = (q && match) ? '-1' : '';
+        if (match) shown++;
+    }
+
+    if (hint) {
+        if (q) {
+            hint.style.display = 'block';
+            hint.textContent = shown > 0 ? ('بحث: ' + shown + ' قناة مطابقة اترفعت فوق') : 'لا توجد قناة بهذا الاسم في هذا الحساب';
+        } else {
+            hint.style.display = 'none';
+            hint.textContent = '';
+        }
+    }
 }
 
 // ✅ تشغيل/إطفاء قناة محددة
