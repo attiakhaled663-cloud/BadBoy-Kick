@@ -1368,15 +1368,23 @@ var $ = function(id) { return document.getElementById(id); };
 // ═══════════════════════════════════════
 // ✅ قائمة بروكسيات موسّعة — أقوى 6 بروكسيات مع تبديل ذكي
 var PROXIES = [
-    // ✅ codetabs — الأسرع والأكثر موثوقية
-    { name:'codetabs', build:function(u){return 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u);}, canPost:true },
-    // ✅ allorigins — ممتاز لـ GET (موثوق جداً)
+    // ✅ corsproxy.io — يدعم POST وتمرير الهيدرز (الأفضل للإرسال)
+    { name:'corsproxy.io', build:function(u){return 'https://api.corsproxy.io/?url='+encodeURIComponent(u);}, canPost:true },
+    // ✅ cors.lol — يدعم POST
+    { name:'cors.lol', build:function(u){return 'https://api.cors.lol/?url='+encodeURIComponent(u);}, canPost:true },
+    // ✅ cors-worker — يدعم POST (تمرير مباشر بدون ترميز)
+    { name:'cors-worker', build:function(u){return 'https://test.cors.workers.dev/?'+u;}, canPost:true },
+    // ✅ cors.eu.org — يدعم POST
+    { name:'cors.eu.org', build:function(u){return 'https://cors.eu.org/'+u;}, canPost:true },
+    // ✅ codetabs — سريع لكن GET فقط (يُستخدم لجلب بيانات القنوات فقط)
+    { name:'codetabs', build:function(u){return 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u);}, canPost:false },
+    // ✅ allorigins — GET فقط
     { name:'allorigins', build:function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u);}, canPost:false },
-    // ✅ corsproxy.org — سريع ويدعم POST
+    // ✅ corsproxy.org — أصبح محدوداً
     { name:'corsproxy.org', build:function(u){return 'https://corsproxy.org/?'+encodeURIComponent(u);}, canPost:true },
-    // ✅ thingproxy — احتياطي موثوق
+    // ✅ thingproxy — احتياطي (له حد يومي منخفض)
     { name:'thingproxy', build:function(u){return 'https://thingproxy.freeboard.io/fetch/'+u;}, canPost:true },
-    // ✅ cors.sh — يدعم POST
+    // ✅ cors.sh — يحتاج مفتاح API غالباً
     { name:'cors.sh', build:function(u){return 'https://cors.sh/'+u;}, canPost:true },
     // ✅ مباشر — يعمل فقط على kick.com
     { name:'direct', build:function(u){return u;}, canPost:true }
@@ -1433,7 +1441,7 @@ var _bestProxy = -1; // البروكسي الأفضل (يُحدّث عند ال�
 var _proxyFailCount = {}; // عدّاد فشل كل بروكسي
 
 // ✅ مفتاح حفظ البروكسي الأفضل في localStorage (للبقاء بعد إعادة التحميل)
-var BEST_PROXY_KEY = 'redkick_best_proxy_v1';
+var BEST_PROXY_KEY = 'redkick_best_proxy_v2';
 
 function loadBestProxy() {
     try {
@@ -1872,59 +1880,49 @@ async function verifyChannelComprehensive(slug, bot) {
 //  إرسال رسالة
 // ═══════════════════════════════════════
 async function sendMessage(chatroomId, content, token, preferredProxy) {
+    // ✅ الإصلاح: جرّب كل البروكسيات على كل الـ endpoints قبل إعلان أي فشل
+    // المشكلة القديمة: البروكسي نفسه يردّ 403/429 والكود يفهمها كخطأ من كيك
+    // (لا صلاحية / حظر) فيوقف الإرسال غلط — رغم إن الرسالة ممكن تبعت عادي
+    // ببروكسي تاني. دلوقتي: الحالة (403/401/429) تتعدّ خطأ حقيقي فقط
+    // لو بروكسيين مختلفين على الأقل ردّوا بنفس الحالة.
+    var endpoints = [
+        { path:'/api/v2/messages/send/'+chatroomId, body:{content:content, type:'message'} },
+        { path:'/api/v1/chat-messages', body:{content:content, chatroom_id:parseInt(chatroomId)} }
+    ];
+    var order = getProxyOrder(preferredProxy);
     var lastErr = null;
-    var proxyPref = preferredProxy;
+    var statusCounts = {}; // عدّاد حالات 401/403/429 عبر البروكسيات المختلفة
 
-    try {
-        var r2 = await proxiedFetch('/api/v2/messages/send/'+chatroomId, {
-            method:'POST', token:token, timeout:8000, preferredProxy:proxyPref,
-            body: {content:content, type:'message'}
-        });
-        if (r2.res.ok) { return { success:true, proxyUsed:r2.proxyUsed }; }
-        if (r2.res.status === 419) {
-            await refreshXsrf();
+    for (var ei = 0; ei < endpoints.length; ei++) {
+        var ep = endpoints[ei];
+        for (var oi = 0; oi < order.length; oi++) {
+            var p = order[oi];
+            if (!PROXIES[p].canPost) continue;
             try {
-                var r2b = await proxiedFetch('/api/v2/messages/send/'+chatroomId, {
-                    method:'POST', token:token, timeout:8000, preferredProxy:r2.proxyUsed,
-                    body: {content:content, type:'message'}
+                var r = await proxiedFetch(ep.path, {
+                    method:'POST', token:token, timeout:10000,
+                    preferredProxy:p, body:ep.body
                 });
-                if (r2b.res.ok) { return { success:true, proxyUsed:r2b.proxyUsed }; }
-            } catch(e2b) {}
+                if (r.res.ok) { return { success:true, proxyUsed:r.proxyUsed }; }
+                var st = r.res.status;
+                if (st === 419) { await refreshXsrf(); continue; } // إعادة تحديث CSRF ومحاولة بروكسي آخر
+                // سجّل الحالة وجرّب بروكسي تاني — الردود دي ممكن تكون من البروكسي نفسه مش من كيك
+                if (st === 401 || st === 403 || st === 429) {
+                    statusCounts[st] = (statusCounts[st] || 0) + 1;
+                }
+                lastErr = new Error('HTTP '+st);
+            } catch(e) {
+                lastErr = e;
+            }
         }
-        if (r2.res.status===429) throw new Error('حظر مؤقت');
-        if (r2.res.status===403) throw new Error('لا صلاحية');
-        if (r2.res.status===401) throw new Error('توكن منتهي');
-        proxyPref = r2.proxyUsed;
-    } catch(e) {
-        if (e.message.indexOf('حظر')>=0||e.message.indexOf('صلاحية')>=0||e.message.indexOf('منتهي')>=0) throw e;
-        lastErr = e;
     }
 
-    try {
-        var r1 = await proxiedFetch('/api/v1/chat-messages', {
-            method:'POST', token:token, timeout:8000, preferredProxy:proxyPref,
-            body: {content:content, chatroom_id:parseInt(chatroomId)}
-        });
-        if (r1.res.ok) { return { success:true, proxyUsed:r1.proxyUsed }; }
-        if (r1.res.status === 419) {
-            await refreshXsrf();
-            try {
-                var r1b = await proxiedFetch('/api/v1/chat-messages', {
-                    method:'POST', token:token, timeout:8000, preferredProxy:r1.proxyUsed,
-                    body: {content:content, chatroom_id:parseInt(chatroomId)}
-                });
-                if (r1b.res.ok) { return { success:true, proxyUsed:r1b.proxyUsed }; }
-            } catch(e1b) {}
-        }
-        if (r1.res.status===429) throw new Error('حظر مؤقت');
-        if (r1.res.status===403) throw new Error('لا صلاحية');
-        if (r1.res.status===401) throw new Error('توكن منتهي');
-        throw new Error('فشل الإرسال ('+r1.res.status+')');
-    } catch(e) {
-        if (e.message.indexOf('حظر')>=0||e.message.indexOf('صلاحية')>=0||e.message.indexOf('منتهي')>=0) throw e;
-        if (e instanceof TypeError || e.message.indexOf('Failed to fetch')>=0 || e.message==='timeout') throw new Error('خطأ اتصال');
-        throw e;
-    }
+    // ✅ خطأ حقيقي من كيك فقط لو أكد بروكسيان مختلفان على الأقل نفس الحالة
+    if (statusCounts[429] >= 2) throw new Error('حظر مؤقت');
+    if (statusCounts[403] >= 2) throw new Error('لا صلاحية');
+    if (statusCounts[401] >= 2) throw new Error('توكن منتهي');
+    if (lastErr instanceof TypeError || (lastErr && lastErr.message && lastErr.message.indexOf('Failed to fetch')>=0)) throw new Error('خطأ اتصال');
+    throw lastErr || new Error('فشل الإرسال');
 }
 
 // ═══════════════════════════════════════
@@ -5718,6 +5716,8 @@ var _TC_RETRY_CONCURRENCY  = 3;
 var _tcRunning             = false;
 
 var _TC_PROXIES = [
+  { name:'corsproxy.io',  build:function(u){ return 'https://api.corsproxy.io/?url='+encodeURIComponent(u); } },
+  { name:'cors.lol',      build:function(u){ return 'https://api.cors.lol/?url='+encodeURIComponent(u); } },
   { name:'codetabs',      build:function(u){ return 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u); } },
   { name:'corsproxy.org', build:function(u){ return 'https://corsproxy.org/?'+encodeURIComponent(u); } },
   { name:'cors-worker',   build:function(u){ return 'https://test.cors.workers.dev/?'+u; } },
