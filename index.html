@@ -275,7 +275,12 @@
         @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 
         /* ═══ بطاقة البوت ═══ */
-        .bot-list { display:flex; flex-direction:column; gap:10px; overflow-y:auto; padding:4px 2px; }
+        .bot-list {
+            display:flex; flex-direction:column; gap:10px; overflow-y:auto; padding:4px 2px;
+            max-height: 360px;
+        }
+        @media (max-height: 720px){ .bot-list { max-height: 260px; } }
+        @media (max-height: 560px){ .bot-list { max-height: 180px; } }
         .bot-list::-webkit-scrollbar { width:4px; }
         .bot-list::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.2); border-radius:2px; }
         .bot-card {
@@ -340,20 +345,69 @@
         .secondary-actions { display:flex; gap:8px; margin-top:8px; }
         .secondary-actions .btn { flex:1; padding:10px; font-size:12px; }
 
-        /* ═══ النافذة المنبثقة ═══ */
+        /* ═══ النافذة المنبثقة — تطابق حجم القائمة الأساسية بالظبط (متمركز ونفس العرض) ═══ */
         .modal-overlay {
-            position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px);
-            z-index:1000; display:none; align-items:center; justify-content:center;
-            padding:8px;
+            /* ✅ نفس box بالظبط مثل .app-container — مرئي/مخفي فقط */
+            position:fixed !important;
+            top:110px !important; left:50% !important;
+            transform:translateX(-50%) !important;
+            width:calc(100% - 24px) !important;
+            max-width:460px !important;
+            height:auto !important;
+            min-height:0 !important;
+            max-height:calc(100vh - 130px) !important;
+            margin:0 !important;
+            padding:0 !important;
+            background:transparent !important;
+            border:none !important;
+            z-index:1700;
+            visibility:hidden; opacity:0; pointer-events:none;
+            overflow:hidden !important;
         }
-        .modal-overlay.open { display:flex; animation:fadeIn .25s ease; }
+        .modal-overlay.open {
+            visibility:visible !important; opacity:1 !important; pointer-events:auto !important;
+            overflow-y:auto !important; overflow-x:hidden !important;
+            background:rgba(6,10,6,0.92) !important;
+            background-image:
+                radial-gradient(circle at 50% 0%, rgba(83,252,24,0.10), transparent 60%),
+                linear-gradient(180deg, rgba(83,252,24,0.05), rgba(6,10,6,0.92) 40%) !important;
+            border:1px solid rgba(83,252,24,0.35) !important;
+            border-radius:16px !important;
+            box-shadow:
+                0 0 0 1px rgba(0,0,0,0.45),
+                0 14px 44px rgba(0,0,0,0.65),
+                0 0 24px rgba(83,252,24,0.10) !important;
+            backdrop-filter:blur(6px) !important;
+            -webkit-backdrop-filter:blur(6px) !important;
+            animation:fadeInCenter .25s ease;
+        }
+        @keyframes fadeInCenter {
+            from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+            to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @media (max-width:560px){
+            .modal-overlay,
+            .modal-overlay.open {
+                width:calc(100% - 12px) !important;
+                max-width:none !important;
+                border-radius:14px !important;
+                top:108px !important;
+                max-height:calc(100vh - 124px) !important;
+                left:50% !important;
+                right:auto !important;
+                transform:translateX(-50%) !important;
+            }
+        }
+        .modal-overlay.open::-webkit-scrollbar { width:6px; }
+        .modal-overlay.open::-webkit-scrollbar-thumb { background:rgba(83,252,24,0.4); border-radius:3px; }
+        .modal-overlay.open::-webkit-scrollbar-track { background:transparent; }
         .modal {
-            width:100%; max-width:420px; max-height:96vh; overflow-y:auto;
-            background:linear-gradient(180deg,#0d2a0a 0%,#0a0f08 100%);
-            border:2px solid var(--accent); border-radius:16px;
-            padding:16px 14px 14px; position:relative;
-            box-shadow:0 0 60px rgba(83,252,24,.05),0 0 120px rgba(255,255,255,0.12);
-            animation:modalIn .35s cubic-bezier(.16,1,.3,1);
+            width:100% !important; max-width:none !important; max-height:none !important;
+            overflow:visible !important;
+            background:transparent !important;
+            border:none !important; border-radius:0 !important;
+            padding:14px 14px 16px !important; position:relative;
+            box-shadow:none !important;
         }
         @keyframes modalIn{from{opacity:0;transform:scale(.92) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
         .modal::-webkit-scrollbar { width:5px; }
@@ -775,6 +829,440 @@ body {
 
         /* ===== فحص حالة التوكنات ===== */
         .token-check-btn{position:relative}.token-check-btn i{color:var(--accent);filter:drop-shadow(0 0 5px rgba(83,252,24,.35))}.token-check-content{padding-top:2px}.token-check-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 12px}.token-stat{border:1px solid rgba(255,255,255,.13);border-radius:12px;padding:12px 10px;background:rgba(255,255,255,.035);text-align:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}.token-stat .ts-icon{width:30px;height:30px;margin:0 auto 7px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:rgba(83,252,24,.08)}.token-stat .ts-icon i{font-size:13px;color:var(--accent)}.token-stat .ts-num{font-size:24px;font-weight:900;line-height:1;color:var(--fg)}.token-stat .ts-label{font-size:10px;color:var(--muted);margin-top:5px}.token-stat.expired{border-color:rgba(255,59,59,.32);background:rgba(255,59,59,.055)}.token-stat.expired .ts-icon{background:rgba(255,59,59,.10)}.token-stat.expired .ts-icon i,.token-stat.expired .ts-num{color:#ff7676}.token-stat.active{border-color:rgba(0,200,83,.28);background:rgba(0,200,83,.045)}.token-stat.active .ts-icon{background:rgba(0,200,83,.10)}.token-stat.active .ts-icon i,.token-stat.active .ts-num{color:#59ef96}.token-check-section-title{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:900;color:var(--fg);margin:10px 0 7px}.token-check-section-title i{color:var(--accent);font-size:11px}.expired-list{display:flex;flex-direction:column;gap:6px;max-height:210px;overflow-y:auto;padding-left:2px}.expired-list::-webkit-scrollbar{width:4px}.expired-list::-webkit-scrollbar-thumb{background:rgba(255,59,59,.35);border-radius:2px}.expired-account{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;background:rgba(255,59,59,.06);border:1px solid rgba(255,59,59,.17);color:#ffd1d1;font-size:12px;font-weight:700}.expired-account i{color:#ff6d6d;font-size:11px}.token-empty{text-align:center;padding:13px 8px;border:1px dashed rgba(0,200,83,.28);border-radius:9px;background:rgba(0,200,83,.035);color:#7dffb0;font-size:11px}.token-check-loading{text-align:center;padding:18px 8px 12px;color:var(--muted);font-size:11px}.token-check-errors{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,193,7,.06);border:1px solid rgba(255,193,7,.2);color:#ffd966;font-size:10px;line-height:1.6}.token-check-note{text-align:center;font-size:9px;color:var(--muted);margin-top:9px;line-height:1.6}@media(max-width:420px){.token-check-stats{gap:6px}.token-stat{padding:10px 8px}.token-stat .ts-num{font-size:21px}}
+
+        /* ════════════════════════════════════════════════
+           ✅ خلفية WebView لموقع Kick — خلف الواجهة
+           ════════════════════════════════════════════════ */
+        .kick-webview-bg {
+            position: fixed; inset: 0; width: 100%; height: 100%;
+            border: 0; z-index: 0; background: #000;
+            display: block; pointer-events: auto;
+        }
+        .kick-webview-fallback {
+            position: fixed; inset: 0; z-index: 0;
+            background:
+              radial-gradient(circle at 15% 15%, rgba(83,252,24,.18), transparent 30%),
+              radial-gradient(circle at 85% 25%, rgba(31,143,13,.16), transparent 34%),
+              radial-gradient(circle at 50% 100%, rgba(184,255,77,.10), transparent 38%),
+              #070a06;
+            display: none; align-items: center; justify-content: center;
+            flex-direction: column; padding: 24px; text-align: center;
+            color: #e8ffe0; font-family: inherit;
+        }
+        .kick-webview-fallback.show { display: flex; }
+        .kick-webview-fallback .f-logo {
+            font-size: 28px; font-weight: 900; letter-spacing: -1px;
+            background: linear-gradient(135deg,#53fc18,#9dff6b);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+            background-clip:text; margin-bottom: 14px;
+        }
+        .kick-webview-fallback .f-title { font-size: 16px; font-weight: 900; color: #b8ff4d; margin-bottom: 10px; }
+        .kick-webview-fallback .f-desc { font-size: 12px; line-height: 1.8; max-width: 320px; color: #9affc4; opacity: .9; }
+        .kick-webview-fallback .f-open {
+            display: inline-flex; align-items: center; gap: 7px;
+            margin-top: 14px; padding: 10px 18px;
+            background: linear-gradient(135deg,#53fc18,#9dff6b); color: #000;
+            font-weight: 800; font-size: 13px; border: 2px solid #fff;
+            border-radius: 11px; text-decoration: none;
+        }
+
+        /* ════════════════════════════════════════════════
+           ✅ الشريط العائم الصغير — ⚙️ + زر تشغيل/إيقاف
+           ════════════════════════════════════════════════ */
+        .compact-bar {
+            position: fixed; top: 60px; left: 12px; z-index: 1600;
+            display: flex; align-items: center; gap: 8px;
+            padding: 5px 8px 5px 5px;
+            background: rgba(10,15,8,0.94);
+            border: 1px solid rgba(83,252,24,.35);
+            border-radius: 999px;
+            box-shadow: 0 6px 22px rgba(0,0,0,.55), 0 0 14px rgba(83,252,24,.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            user-select: none;
+        }
+        .compact-bar .cb-gear {
+            width: 38px; height: 38px; border-radius: 50%;
+            background: rgba(83,252,24,.08);
+            border: 2px solid rgba(255,255,255,.45);
+            color: #e8ffe0; font-size: 14px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all .2s; flex-shrink: 0;
+        }
+        .compact-bar .cb-gear:hover { background: rgba(83,252,24,.22); border-color: #fff; transform: scale(1.05); }
+        .compact-bar .cb-play {
+            height: 38px; padding: 0 16px; border-radius: 999px;
+            background: linear-gradient(135deg,#53fc18,#9dff6b);
+            color: #000; border: 2px solid #fff; cursor: pointer;
+            font-weight: 800; font-size: 13px; font-family: inherit;
+            display: inline-flex; align-items: center; gap: 7px;
+            transition: all .2s; white-space: nowrap;
+        }
+        .compact-bar .cb-play:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(83,252,24,.4); }
+        .compact-bar .cb-play:active:not(:disabled) { transform: scale(.96); }
+        .compact-bar .cb-play:disabled { opacity: .5; cursor: not-allowed; }
+        .compact-bar .cb-play.active-run {
+            background: var(--danger); color: #fff; border-color: #fff;
+            box-shadow: 0 0 14px rgba(255,59,59,.5);
+            animation: cbRunPulse 1.5s ease-in-out infinite;
+        }
+        @keyframes cbRunPulse{
+            0%,100%{box-shadow:0 0 8px rgba(255,59,59,.35)}
+            50%{box-shadow:0 0 18px rgba(255,59,59,.7)}
+        }
+
+        /* ════════════════════════════════════════════════
+           ✅ حجم كل النوافذ المنبثقة بنفس حجم image 1
+           وسكرول داخلها بدل تمدد الصفحة
+           ════════════════════════════════════════════════ */
+        .modal {
+            max-width: 460px !important;
+            width: calc(100% - 24px) !important;
+            max-height: 82vh !important;
+            height: auto !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            scrollbar-width: thin;
+        }
+        .modal::-webkit-scrollbar { width: 6px; }
+        .modal::-webkit-scrollbar-thumb { background: rgba(83,252,24,.35); border-radius: 3px; }
+        /* ✅ اجعل كل sub-panel بنفس حجم القائمة الرئيسية */
+        #settingsModal .modal,
+        #channelModal .modal,
+        #unifiedModal .modal,
+        #quickSendModal .modal,
+        #qsChannelsModal .modal,
+        #tokenCheckModal .modal,
+        #transferModal .modal,
+        #renewTokenModal .modal,
+        #exemptModal .modal,
+        #confirmDeleteModal .modal {
+            max-width: 460px !important;
+            max-height: 82vh !important;
+        }
+        /* ✅ حافظ على scroll داخل القوائم الطويلة بدل تمدد النافذة */
+        .channels-list,
+        .bot-list,
+        .quick-list,
+        .expired-list {
+            overflow-y: auto !important;
+        }
+        .modal-actions.sticky-actions {
+            position: sticky; bottom: -1px;
+            margin: 10px -14px -14px;
+            padding: 10px 14px 14px;
+            background: linear-gradient(180deg, rgba(7,10,6,0) 0%, #0d1a0a 40%, #0d1a0a 100%);
+            border-top: 1px solid rgba(83,252,24,.25);
+            border-radius: 0 0 14px 14px;
+            z-index: 8;
+        }
+        /* ✅ تأكيد أن الفورمات في image 1 (compact) لا تمتد أكثر من 82vh من شاشة الجوال */
+        @media (max-width: 560px){
+            .modal { max-width: calc(100% - 16px) !important; max-height: 86vh !important; border-radius: 12px !important; }
+            #settingsModal .modal, #channelModal .modal, #unifiedModal .modal,
+            #quickSendModal .modal, #qsChannelsModal .modal, #tokenCheckModal .modal,
+            #transferModal .modal, #renewTokenModal .modal, #exemptModal .modal,
+            #confirmDeleteModal .modal { max-height: 86vh !important; }
+        }
+        @media (max-height: 640px){
+            .modal { max-height: 92vh !important; }
+        }
+        /* ✅ أزرار الحفظ والإلغاء بنفس الحجم في كل النوافذ */
+        .modal-actions { display: flex; gap: 8px; margin-top: 10px; }
+        .modal-actions .btn { flex: 1; padding: 10px; font-size: 13px; }
+
+        /* ✅ نافذة إعدادات القناة: حجم مربع صغير وثابت + سكرول داخلي بدل التمدد */
+        #channelModal.modal-overlay,
+        #channelModal.modal-overlay.open {
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: min(90vw, 340px) !important;
+            max-width: 340px !important;
+            height: min(78vh, 380px) !important;
+            max-height: 380px !important;
+            min-height: 0 !important;
+            animation: none !important;
+        }
+        #channelModal .modal {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            padding: 12px 12px 14px !important;
+        }
+        @media (max-width: 560px){
+            #channelModal.modal-overlay,
+            #channelModal.modal-overlay.open {
+                top: 50% !important;
+                width: min(88vw, 320px) !important;
+                max-width: 320px !important;
+                height: min(72vh, 360px) !important;
+                max-height: 360px !important;
+            }
+        }
+
+        /* ✅✅ إخفاء كل الطبقات الخضراء / النارية خلف الـ iframe
+           حتى يظهر موقع kick.com بألوانه الطبيعية تماماً */
+        #fireCanvas,
+        .bg-glow,
+        .bg-glow.g1,
+        .bg-glow.g2,
+        .bg-glow.g3,
+        .bg-vignette,
+        .halloween-decor,
+        .splash {
+            display: none !important;
+        }
+        body {
+            background: #000 !important;
+        }
+
+        /* ✅ اجعل الـ iframe + الـ fallback في مستوى منخفض تحت الواجهة المعتمة */
+        #kickBgFrame {
+            position: fixed !important;
+            inset: 0;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 1 !important;
+            background: #fff !important;
+        }
+        #kickBgFallback {
+            z-index: 1 !important;
+        }
+
+        /* ✅ الواجهة الأمامية — لون معتم أسود/أسود في أخضر، بدل الشفافية */
+        .app-container {
+            display: none; /* يخفي افتراضياً — يفتح بزر ⚙️ */
+            position: fixed !important;
+            top: 110px !important; left: 50% !important;
+            transform: translateX(-50%) !important;
+            width: calc(100% - 24px) !important;
+            max-width: 460px !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: calc(100vh - 130px) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            z-index: 1500 !important;
+            background: rgba(6,10,6,0.88) !important;
+            background-image:
+                radial-gradient(circle at 50% 0%, rgba(83,252,24,0.10), transparent 60%),
+                linear-gradient(180deg, rgba(83,252,24,0.05), rgba(6,10,6,0.92) 40%) !important;
+            border: 1px solid rgba(83,252,24,0.35) !important;
+            border-radius: 16px !important;
+            box-shadow:
+                0 0 0 1px rgba(0,0,0,0.45),
+                0 14px 44px rgba(0,0,0,0.65),
+                0 0 24px rgba(83,252,24,0.10) !important;
+            padding: 14px 14px 16px !important;
+            backdrop-filter: blur(6px) !important;
+            -webkit-backdrop-filter: blur(6px) !important;
+        }
+        .app-container.show { display: block !important; }
+        /* ✅ نخفي القائمة الرئيسية تماماً طول ما فيه قائمة فرعية مفتوحة فوقها */
+        body.modal-open .app-container.show { visibility: hidden !important; opacity: 0 !important; transition: opacity .15s ease; }
+        .app-container::-webkit-scrollbar { width: 6px; }
+        .app-container::-webkit-scrollbar-thumb { background: rgba(83,252,24,0.4); border-radius: 3px; }
+        .app-container::-webkit-scrollbar-track { background: transparent; }
+        @media (max-width: 560px){
+            .app-container {
+                width: calc(100% - 12px) !important;
+                max-width: none !important;
+                border-radius: 14px !important;
+                top: 108px !important;
+                height: auto !important;
+                min-height: 0 !important;
+                max-height: calc(100vh - 124px) !important;
+            }
+        }
+        /* ════════════════════════════════════════════════════════════════
+           ✅ توحيد حجم القوائم الفرعية (الصورة 2 والصورة 3) مع القائمة الرئيسية (الصورة 1)
+           نفس العرض + نفس الارتفاع الأقصى + نفس الحشو + نفس الحواف + نفس مقاسات العناصر
+           ⚠️ لا تغيير في الألوان أو المحتوى أو الوظائف — القائمة الرئيسية كما هي
+           ════════════════════════════════════════════════════════════════ */
+        /* 1) نفس صندوق القائمة الرئيسية (.app-container) بالظبط */
+        #transferModal.modal-overlay.open,
+        #quickSendModal.modal-overlay.open {
+            width: calc(100% - 12px) !important;
+            max-width: none !important;
+            top: 108px !important;
+            max-height: calc(100vh - 124px) !important;
+            border-radius: 14px !important;
+        }
+        #transferModal .modal,
+        #quickSendModal .modal {
+            width: 100% !important;
+            max-width: none !important;
+            max-height: calc(100vh - 124px) !important;
+            padding: 14px 14px 16px !important;
+            border-radius: 14px !important;
+        }
+        /* 2) نفس مقاسات أزرار القائمة الرئيسية (تشغيل المحددة / تحديد الكل) */
+        #transferModal .modal-actions .btn,
+        #quickSendModal .modal-actions .btn { padding: 13px !important; font-size: 13px !important; }
+        /* 3) نفس مقاسات صف القائمة الرئيسية (بطاقة البوت) */
+        #quickSendModal .quick-item { padding: 12px 14px !important; gap: 12px !important; border-radius: 14px !important; }
+        #quickSendModal .quick-item .qi-icon { width: 40px !important; height: 40px !important; border-radius: 11px !important; font-size: 16px !important; }
+        #quickSendModal .quick-item .qi-name { font-size: 14px !important; }
+        #quickSendModal .quick-item .bot-checkbox { width: 26px !important; height: 26px !important; border-radius: 7px !important; }
+        /* 4) نفس مقاسات الحقول والمناطق النصية في القائمة الرئيسية */
+        #transferModal .modal-field label,
+        #quickSendModal .modal-field label { font-size: 13px !important; margin-bottom: 6px !important; }
+        #transferModal .modal-field input,
+        #quickSendModal .modal-field input,
+        #quickSendModal .modal-field textarea {
+            padding: 12px 14px !important; font-size: 14px !important; border-radius: 12px !important;
+        }
+        #quickSendModal .modal-field textarea { min-height: 90px !important; }
+        #transferModal .modal-field textarea { padding: 12px 14px !important; border-radius: 12px !important; }
+        /* 5) نفس مقاسات صف التوجل + العنوان + الأيقونة */
+        #quickSendModal .qs-sep-toggle { padding: 8px 11px !important; border-radius: 10px !important; }
+        #quickSendModal .qs-sep-toggle .sep-label { font-size: 12px !important; }
+        #transferModal .modal-title,
+        #quickSendModal .modal-title { font-size: 20px !important; }
+        #transferModal .modal-icon,
+        #quickSendModal .modal-icon { width: 42px !important; height: 42px !important; border-radius: 12px !important; }
+        /* 6) الشاشات الأكبر من 560 بكسل — نفس قيم القائمة الرئيسية */
+        @media (min-width: 561px){
+            #transferModal.modal-overlay.open,
+            #quickSendModal.modal-overlay.open {
+                width: calc(100% - 24px) !important;
+                max-width: 460px !important;
+                top: 110px !important;
+                max-height: calc(100vh - 130px) !important;
+                border-radius: 16px !important;
+            }
+            #transferModal .modal,
+            #quickSendModal .modal {
+                max-height: calc(100vh - 130px) !important;
+                border-radius: 16px !important;
+                padding: 14px 14px 16px !important;
+            }
+            #transferModal .modal-title,
+            #quickSendModal .modal-title { font-size: 24px !important; }
+            #transferModal .modal-icon,
+            #quickSendModal .modal-icon { width: 48px !important; height: 48px !important; }
+        }
+        @media (max-width: 420px){
+            #transferModal .modal,
+            #quickSendModal .modal { max-width: none !important; border-radius: 14px !important; padding: 14px 14px 16px !important; }
+            #transferModal .modal-title,
+            #quickSendModal .modal-title { font-size: 20px !important; }
+            #transferModal .modal-icon,
+            #quickSendModal .modal-icon { width: 42px !important; height: 42px !important; }
+        }
+        @media (max-height: 640px){
+            #transferModal .modal,
+            #quickSendModal .modal { max-height: calc(100vh - 124px) !important; }
+        }
+
+        /* ✅✅ تثبيت نهائي لحجم نافذة إعدادات القناة — مربع صغير في المنتصف + سكرول
+           مكتوب آخر حاجة في الـ CSS وبأعلى خصوصية ممكنة عشان تكسب أي تعارض */
+        html body div.modal-overlay#channelModal,
+        html body div.modal-overlay#channelModal.open {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            right: auto !important;
+            bottom: auto !important;
+            transform: translate(-50%, -50%) !important;
+            width: min(88vw, 320px) !important;
+            max-width: 320px !important;
+            height: min(70vh, 360px) !important;
+            max-height: 360px !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            animation: none !important;
+            overflow: hidden !important;
+        }
+        html body div.modal-overlay#channelModal.open {
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+        }
+        html body div.modal-overlay#channelModal > div.modal {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
+            padding: 10px 10px 12px !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        html body div.modal-overlay#channelModal .modal-actions.sticky-actions {
+            position: sticky !important;
+            bottom: -1px !important;
+            margin: 10px -10px -12px !important;
+            padding: 10px 10px 12px !important;
+        }
+
+        /* ✅✅ نفس المعاملة لنافذة "نقل البيانات بين الأجهزة" (استيراد/استعادة) — مربعة صغيرة وسط الشاشة + سكرول */
+        html body div.modal-overlay#transferModal,
+        html body div.modal-overlay#transferModal.open {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            right: auto !important;
+            bottom: auto !important;
+            transform: translate(-50%, -50%) !important;
+            width: min(90vw, 360px) !important;
+            max-width: 360px !important;
+            height: min(75vh, 440px) !important;
+            max-height: 440px !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            animation: none !important;
+            overflow: hidden !important;
+            border-radius: 16px !important;
+        }
+        html body div.modal-overlay#transferModal.open {
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+        }
+        html body div.modal-overlay#transferModal > div.modal {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100% !important;
+            max-height: 100% !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
+            padding: 10px 10px 12px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            border-radius: 16px !important;
+        }
+        html body div.modal-overlay#transferModal .modal-actions:last-of-type {
+            position: sticky !important;
+            bottom: -1px !important;
+            margin: 8px -10px -12px !important;
+            padding: 8px 10px 12px !important;
+            background: linear-gradient(180deg, rgba(7,10,6,0) 0%, #0d1a0a 40%, #0d1a0a 100%) !important;
+            border-top: 1px solid rgba(83,252,24,.25) !important;
+        }
+        @media (max-width: 560px){
+            html body div.modal-overlay#transferModal,
+            html body div.modal-overlay#transferModal.open {
+                width: min(88vw, 340px) !important;
+                max-width: 340px !important;
+                height: min(72vh, 420px) !important;
+                max-height: 420px !important;
+            }
+        }
+
+        /* ✅✅ زرار الإغلاق (X) يبقى عائم ثابت فوق النافذة، مايتحركش مع سكرول المحتوى */
+        html body div.modal-overlay#channelModal > .modal-x,
+        html body div.modal-overlay#transferModal > .modal-x {
+            position: absolute !important;
+            top: 10px !important;
+            left: 10px !important;
+            z-index: 30 !important;
+        }
     </style>
 </head>
 <body>
@@ -789,6 +1277,23 @@ body {
 </div>
 
 
+<!-- ✅ خلفية WebView لموقع Kick خلف الواجهة -->
+<iframe id="kickBgFrame" class="kick-webview-bg" src="https://kick.com/"
+        referrerpolicy="no-referrer-when-downgrade"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        allow="autoplay; encrypted-media"
+        title="Kick.com"></iframe>
+<div id="kickBgFallback" class="kick-webview-fallback">
+    <div class="f-logo">KICK</div>
+    <div class="f-title">تعذّر تحميل kick.com داخل الصفحة</div>
+    <div class="f-desc">
+        موقع kick.com يرفض العرض داخل الإطار (X-Frame-Options). اضغط الزر لفتح الموقع في تبويب جديد والرجوع لاستخدام البوتات من هنا. باقي مميزات الموقع تعمل بشكل طبيعي.
+    </div>
+    <a class="f-open" href="https://kick.com/" target="_blank" rel="noopener noreferrer">
+        <i class="fas fa-up-right-from-square"></i> فتح kick.com في تبويب جديد
+    </a>
+</div>
+
 <canvas id="fireCanvas" width="1024" height="568"></canvas>
 <div class="bg-glow g1"></div>
 <div class="bg-glow g2"></div>
@@ -796,6 +1301,15 @@ body {
 <div class="bg-vignette"></div>
 <div class="toast-box" id="toasts"></div>
 <div class="net-status" id="netStatus"><i class="fas fa-wifi"></i> <span id="netStatusText">--</span></div>
+
+<!-- ✅ الشريط العائم الصغير: ⚙️ + زر تشغيل/إيقاف -->
+<div class="compact-bar" id="compactBar">
+    <button class="cb-gear" onclick="toggleMainPanel()" title="إظهار/إخفاء القائمة" aria-label="إعدادات"><i class="fas fa-gear"></i></button>
+    <button class="cb-play" id="cbPlayBtn" onclick="toggleBulkRun()" title="تشغيل/إيقاف المحدد">
+        <i class="fas fa-play" id="cbPlayIcon"></i>
+        <span id="cbPlayLabel">تشغيل</span>
+    </button>
+</div>
 
 <!-- ✅ نافذة الإرسال المباشر -->
 
@@ -969,8 +1483,8 @@ body {
 
 <!-- ✅ نافذة نقل البيانات بين الأجهزة -->
 <div class="modal-overlay" id="transferModal" onclick="if(event.target===this)closeTransferModal()">
+    <div class="modal-x" onclick="closeTransferModal()" title="إغلاق"><i class="fas fa-xmark"></i></div>
     <div class="modal">
-        <div class="modal-x" onclick="closeTransferModal()" title="إغلاق"><i class="fas fa-xmark"></i></div>
         <div class="modal-head">
             <div class="modal-icon"><i class="fas fa-share-nodes"></i></div>
             <div class="modal-title">نقل البيانات بين الأجهزة</div>
@@ -1151,8 +1665,8 @@ body {
 
 <!-- نافذة إعدادات قناة محددة -->
 <div class="modal-overlay" id="channelModal" onclick="if(event.target===this)closeChannelSettings()">
+    <div class="modal-x" onclick="closeChannelSettings()" title="إغلاق"><i class="fas fa-xmark"></i></div>
     <div class="modal">
-        <div class="modal-x" onclick="closeChannelSettings()" title="إغلاق"><i class="fas fa-xmark"></i></div>
         <div class="modal-head">
             <div class="modal-icon"><i class="fas fa-tv"></i></div>
             <div class="modal-title" id="channelModalTitle">إعدادات القناة</div>
@@ -1249,7 +1763,7 @@ body {
             <div class="toggle" id="tgStickersOnly" onclick="cToggleStickersOnly()"></div>
         </div>
 
-        <div class="modal-actions">
+        <div class="modal-actions sticky-actions">
             <button class="btn btn-fire" onclick="saveChannelSettings()"><i class="fas fa-check"></i> حفظ</button>
             <button class="btn btn-ghost" onclick="closeChannelSettings()"><i class="fas fa-xmark"></i> إلغاء</button>
         </div>
@@ -6021,5 +6535,252 @@ async function runTokenCheck(){
   _tcRender(results, list, Date.now() - started);
 }
 
+/* ═══════════════════════════════════════════════
+   ✅ Compact bar + iframe bg + snapshot/restore (إلغاء يلغي التغييرات)
+   ═══════════════════════════════════════════════ */
+(function(){
+  // ---- iFrame fallback (kick.com يرفض الإطار أحيانًا عبر X-Frame-Options) ----
+  var iframe = $('kickBgFrame');
+  var fb = $('kickBgFallback');
+  function showFallback(){ if (fb) fb.classList.add('show'); }
+  if (iframe){
+    iframe.addEventListener('error', showFallback);
+    // بعد 7 ثوانٍ لو ما قدرناش نلمس محتوى الإطار، أظهر رسالة بديلة
+    setTimeout(function(){
+      try {
+        var doc = iframe.contentDocument || iframe.contentWindow && iframe.contentWindow.document;
+        if (!doc || !doc.body || doc.body.childElementCount === 0) {
+          // cross-origin غالباً — لا نظهر fallback تلقائياً لأن kick.com عادةً يحمل لكن المحتوى محجوب
+        }
+      } catch(_){
+        // cross-origin — هذا متوقع، لا تظهر fallback هنا
+      }
+    }, 7000);
+    // زر فتح في تبويب جديد موجود دائماً في fallback
+  }
+
+  // ---- تحديث زر التشغيل/الإيقاف في الشريط العائم تبعا للحالة الفعلية ----
+  function updateCompactBar(){
+    var btn = $('cbPlayBtn');
+    var ico = $('cbPlayIcon');
+    var lbl = $('cbPlayLabel');
+    if (!btn) return;
+    var playing = !!_bulkRunActive;
+    btn.classList.toggle('active-run', playing);
+    if (ico) ico.className = playing ? 'fas fa-stop' : 'fas fa-play';
+    if (lbl) lbl.textContent = playing ? 'ايقاف' : 'تشغيل';
+    var hasSel = false;
+    for (var k in selectedBots) if (selectedBots[k]) { hasSel = true; break; }
+    btn.disabled = !hasSel && !playing;
+    btn.title = playing ? 'ايقاف المحدد' : 'تشغيل المحدد';
+  }
+  window._updateCompactBar = updateCompactBar;
+
+  // ---- إخفاء الواجهة الأساسية عند الدخول (image 2) ----
+  window.toggleMainPanel = function(){
+    var ac = document.querySelector('.app-container');
+    if (!ac) return;
+    var willShow = !ac.classList.contains('show');
+    ac.classList.toggle('show', willShow);
+    if (willShow && typeof renderBotList === 'function') renderBotList();
+  };
+
+  // ---- Snapshot/Restore: زر إلغاء يلغي فعلاً، حفظ يحفظ ----
+  function clone(o){ return JSON.parse(JSON.stringify(o == null ? null : o)); }
+  var _snaps = {};
+  var _activeChannelSlug = null;
+
+  function setSnap(k,v){ _snaps[k] = clone(v); }
+  function clearSnap(k){ delete _snaps[k]; }
+
+  // قنوات: نلتقط الـ slug للنشط حالياً عند فتح نافذة القناة
+  if (typeof window.openChannelSettings === 'function'){
+    var _origOCS = window.openChannelSettings;
+    window.openChannelSettings = function(slug){
+      _activeChannelSlug = slug;
+      try{
+        if (activeModalBotId !== null){
+          var b = findBot(activeModalBotId);
+          if (b){
+            for (var i=0;i<b.channels.length;i++){
+              if (b.channels[i].slug === slug){
+                setSnap('ch_'+activeModalBotId+'_'+slug, b.channels[i]);
+                break;
+              }
+            }
+          }
+        }
+      }catch(_){}
+      _origOCS(slug);
+    };
+  }
+  if (typeof window.saveChannelSettings === 'function'){
+    var _origSCS = window.saveChannelSettings;
+    window.saveChannelSettings = function(){
+      try{
+        if (_activeChannelSlug && activeModalBotId !== null){
+          clearSnap('ch_'+activeModalBotId+'_'+_activeChannelSlug);
+        }
+      }catch(_){}
+      _origSCS();
+    };
+  }
+  if (typeof window.closeChannelSettings === 'function'){
+    var _origCCS = window.closeChannelSettings;
+    window.closeChannelSettings = function(){
+      try{
+        if (_activeChannelSlug && activeModalBotId !== null){
+          var k = 'ch_'+activeModalBotId+'_'+_activeChannelSlug;
+          if (_snaps[k]){
+            var b = findBot(activeModalBotId);
+            if (b){
+              for (var i=0;i<b.channels.length;i++){
+                if (b.channels[i].slug === _activeChannelSlug){
+                  var snap = _snaps[k];
+                  Object.keys(b.channels[i]).forEach(function(x){ delete b.channels[i][x]; });
+                  Object.keys(snap).forEach(function(x){ b.channels[i][x] = snap[x]; });
+                  break;
+                }
+              }
+              persist();
+              if (typeof renderChannelsList === 'function') renderChannelsList(b);
+            }
+          }
+        }
+      }catch(_){}
+      _activeChannelSlug = null;
+      _origCCS();
+    };
+  }
+
+  // الإعدادات الموحدة (لكل بوت)
+  if (typeof window.openUnifiedSettings === 'function'){
+    var _origOU = window.openUnifiedSettings;
+    window.openUnifiedSettings = function(){
+      try{
+        if (activeModalBotId !== null){
+          var b = findBot(activeModalBotId);
+          if (b && typeof getBotUnified === 'function'){
+            setSnap('un_'+activeModalBotId, getBotUnified(b));
+          }
+        }
+      }catch(_){}
+      _origOU();
+    };
+  }
+  if (typeof window.saveUnifiedSettings === 'function'){
+    var _origSU = window.saveUnifiedSettings;
+    window.saveUnifiedSettings = function(){
+      try{
+        if (activeModalBotId !== null) clearSnap('un_'+activeModalBotId);
+      }catch(_){}
+      _origSU();
+    };
+  }
+  if (typeof window.closeUnifiedSettings === 'function'){
+    var _origCU = window.closeUnifiedSettings;
+    window.closeUnifiedSettings = function(){
+      try{
+        if (activeModalBotId !== null){
+          var k = 'un_'+activeModalBotId;
+          if (_snaps[k]){
+            var b = findBot(activeModalBotId);
+            if (b && typeof setBotUnified === 'function'){
+              setBotUnified(b, _snaps[k]);
+              persist();
+            }
+          }
+        }
+      }catch(_){}
+      _origCU();
+    };
+  }
+
+  // نافذة إعدادات البوت (إضافة/حذف قناة)
+  if (typeof window.openSettings === 'function'){
+    var _origOS = window.openSettings;
+    window.openSettings = function(id){
+      try{
+        var b = findBot(id);
+        if (b) setSnap('bot_'+id, { channels: b.channels });
+      }catch(_){}
+      _origOS(id);
+    };
+  }
+  if (typeof window.saveSettings === 'function'){
+    var _origSS = window.saveSettings;
+    window.saveSettings = function(){
+      try{
+        if (activeModalBotId !== null) clearSnap('bot_'+activeModalBotId);
+      }catch(_){}
+      _origSS();
+    };
+  }
+  if (typeof window.closeSettings === 'function'){
+    var _origCS = window.closeSettings;
+    window.closeSettings = function(){
+      try{
+        if (activeModalBotId !== null){
+          var k = 'bot_'+activeModalBotId;
+          if (_snaps[k]){
+            var b = findBot(activeModalBotId);
+            if (b){
+              var snap = _snaps[k];
+              if (Array.isArray(snap.channels)){
+                // استرجاع القنوات الموجودة وقت الفتح فقط (الترتيب + الإعدادات)
+                if (b.channels.length === snap.channels.length){
+                  for (var i=0;i<b.channels.length;i++){
+                    Object.keys(b.channels[i]).forEach(function(x){ delete b.channels[i][x]; });
+                    Object.keys(snap.channels[i]).forEach(function(x){ b.channels[i][x] = snap.channels[i][x]; });
+                  }
+                  persist();
+                  if (typeof renderChannelsList === 'function') renderChannelsList(b);
+                  if (typeof renderBotList === 'function') renderBotList();
+                }
+              }
+            }
+          }
+        }
+      }catch(_){}
+      _origCS();
+    };
+  }
+
+  // ---- جعل تحديث زر الإعدادات الموحدة + الشريط العائم متزامناً ----
+  if (typeof window.updateBulkUI === 'function'){
+    var _origUB = window.updateBulkUI;
+    window.updateBulkUI = function(){
+      _origUB();
+      updateCompactBar();
+    };
+  }
+  if (typeof window.forceUIUpdate === 'function'){
+    var _origFU = window.forceUIUpdate;
+    window.forceUIUpdate = function(){
+      _origFU();
+      updateCompactBar();
+    };
+  }
+
+  // تحديث أولي
+  updateCompactBar();
+})();
+
+/* ═══════════════════════════════════════════════════════════
+   ✅ القائمة الفرعية تستخدم نفس box القائمة الأساسية بالظبط
+   - مفيش JS sync_coords بعد الآن، الستايل ثايت ومتمركز من CSS.
+   - نخفي القائمة الأساسية طول ما فيه نافذة فرعية مفتوحة فوقها.
+   ═══════════════════════════════════════════════════════════ */
+(function(){
+  function syncModalOpen(){
+    var any = document.querySelector('.modal-overlay.open');
+    if (any) document.body.classList.add('modal-open');
+    else     document.body.classList.remove('modal-open');
+  }
+  document.querySelectorAll('.modal-overlay').forEach(function(el){
+    new MutationObserver(syncModalOpen).observe(el, { attributes:true, attributeFilter:['class'] });
+  });
+  syncModalOpen();
+})();
 </script>
 </body></html>
