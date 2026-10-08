@@ -1,34 +1,13 @@
-/* ═══════════════════════════════════════════════════════════
-   BadBoy Kick — api.js
-   طبقة الشبكة + دالة إرسال الرسائل (مفصولة عن index.html)
-   يُحمَّل هذا الملف داخل index.html عبر:
-   <script src="api.js"></script>
-   ويجب أن يوضع قبل السكربت الرئيسي في الصفحة
-   ═══════════════════════════════════════════════════════════ */
-
 var KICK_BASE = 'https://kick.com';
 var $ = function(id) { return document.getElementById(id); };
 
-// ═══════════════════════════════════════
-//  البروكسي
-// ═══════════════════════════════════════
-// ✅ قائمة بروكسيات محدّثة بعد فحص كل بروكسي — الأغلبية الميّتة حُذفت
-// (cors.lol و cors.eu.org: حظر 429 | thingproxy: غير موجود | cors.sh: يتطلب مفتاح API)
-// وأُضيف corsfix كبديل قوي يدعم POST
 var PROXIES = [
-    // ✅ corsproxy.io — يدعم POST وتمرير الهيدرز (الأفضل للإرسال)
     { name:'corsproxy.io', build:function(u){return 'https://api.corsproxy.io/?url='+encodeURIComponent(u);}, canPost:true },
-    // ✅ corsfix — يدعم POST وتمرير الهيدرز
     { name:'corsfix', build:function(u){return 'https://proxy.corsfix.com/?'+u;}, canPost:true },
-    // ✅ cors-worker — يدعم POST (تمرير مباشر بدون ترميز)
     { name:'cors-worker', build:function(u){return 'https://test.cors.workers.dev/?'+u;}, canPost:true },
-    // ✅ corsproxy.org — شغّال (يحوّل تلقائياً لأحدث نسخة)
     { name:'corsproxy.org', build:function(u){return 'https://corsproxy.org/?'+encodeURIComponent(u);}, canPost:true },
-    // ✅ codetabs — سريع لكن GET فقط (يُستخدم لجلب بيانات القنوات فقط)
     { name:'codetabs', build:function(u){return 'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u);}, canPost:false },
-    // ✅ allorigins — GET فقط
     { name:'allorigins', build:function(u){return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u);}, canPost:false },
-    // ✅ مباشر — يعمل فقط على kick.com
     { name:'direct', build:function(u){return u;}, canPost:true }
 ];
 
